@@ -199,13 +199,45 @@ public class Router extends Device
 	    return;
 	}
 
-	ICMP icmp = new ICMP();
-	Data data = new Data();
-	ether.setPayload(ip);
+	ICMP icmp = createICMPPacket(origPacket);
 	ip.setPayload(icmp);
-	icmp.setPayload(data);
+	ether.setPayload(ip);
 
+	this.forwardIpPacket(ether, inIface);
     }
+
+    private ICMP createICMPPacket(Ethernet origPacket) {
+	ICMP icmp = new ICMP();
+	icmp.setIcmpType((byte)11);
+	icmp.setIcmpCode((byte)0);
+	
+	Data data = new Data();
+
+	// assigning 20 bytes for 4 (padding) + 8 (ip header) + 8 (extra bytes)
+	byte [] payload = new byte[20];	
+	
+	// setting the ip header and leaving 4 bytes buffer
+	IPv4 ipPacket = (IPv4)origPacket.getPayload();
+	int srcIP = ipPacket.getSourceAddress();
+	payload[4] = (byte) (srcIP >> 24);	
+	payload[5] = (byte) (srcIP >> 16);	
+	payload[6] = (byte) (srcIP >> 8);	
+	payload[7] = (byte) (srcIP);	
+
+	int destIP = ipPacket.getDestinationAddress();
+	payload[8] = (byte) (destIP >> 24);	
+	payload[9] = (byte) (destIP >> 16);	
+	payload[10] = (byte) (destIP >> 8);	
+	payload[11] = (byte) (destIP);	
+
+	// set payload for the Data class
+	data.setData(payload);
+	
+	// set payload for icmp packet
+	icmp.setPayload(data);
+	return icmp;
+    }
+
 
     private IPv4 createIPv4Packet(Ethernet origPacket, Iface inIface) {
 	// create new IPv4 Packet
