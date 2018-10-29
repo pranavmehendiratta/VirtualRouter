@@ -191,7 +191,14 @@ public class Router extends Device
 	}
 
 
-	IPv4 ip = new IPv4();
+	IPv4 ip = createIPv4Packet(origPacket, inIface);
+
+	if (null == ip) {
+	    System.out.println("Cannot create ip packet. Returning from create"
+		    + "ICMPMessage");
+	    return;
+	}
+
 	ICMP icmp = new ICMP();
 	Data data = new Data();
 	ether.setPayload(ip);
@@ -200,14 +207,36 @@ public class Router extends Device
 
     }
 
+    private IPv4 createIPv4Packet(Ethernet origPacket, Iface inIface) {
+	// create new IPv4 Packet
+	IPv4 ip = new IPv4();
+
+	// intialize ttl
+	ip.setTtl((byte)(64));
+
+	// set protocol
+	ip.setProtocol(IPv4.PROTOCOL_ICMP);
+
+	// Find IP address of the inIface and set it as source Ip of the new packet
+	int srcAddr = inIface.getIpAddress();
+	ip.setSourceAddress(srcAddr);
+
+	// find source ip of the original packet and set it as destination
+	IPv4 ipPacket = (IPv4)origPacket.getPayload();
+	int destAddr = ipPacket.getSourceAddress();
+	ip.setDestinationAddress(destAddr);
+
+	return ip;
+    }
+
     private Ethernet createEthernetPacket(Ethernet origPacket, Iface inIface) {
 	// create new ethernet packet
 	Ethernet ether = new Ethernet();
-	
+
 	// set the type of packet
 	ether.setEtherType(Ethernet.TYPE_IPv4);
 
-	// source mac of the packet
+	// source mac of the packet - interface on which we received initially
 	ether.setSourceMACAddress(inIface.getMacAddress().toBytes());	
 
 	// find the mac to forward to using the original ethernet
@@ -215,16 +244,35 @@ public class Router extends Device
 	IPv4 ipPacket = (IPv4)origPacket.getPayload();
 	int srcAddr = ipPacket.getSourceAddress();
 	RouteEntry bestmatch = this.routeTable.lookup(srcAddr);
-	
+
 	// If no entry matched, do nothing
 	if (null == bestmatch) { 
 	    return null; 
 	}
 
-	// Destination mac address
-	MACAddress destMac = bestmatch.getInterface().getMacAddress();
-	ether.setDestinationMACAddress(destMac.toBytes());
+	// Make sure we don't sent a packet back out the interface it came in
+	// Ignore this because its going to be the same interface
+	//Iface outIface = bestMatch.getInterface();
+	//if (outIface == inIface) {
+	//    return null; 
+	//}
 
+	// Set source MAC address in Ethernet header
+	//etherPacket.setSourceMACAddress(outIface.getMacAddress().toBytes());
+
+	// If no gateway, then nextHop is IP destination
+	int nextHop = bestmatch.getGatewayAddress();
+	if (0 == nextHop) { 
+	    nextHop = srcAddr; 
+	}
+
+	// Set destination MAC address in Ethernet header
+	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
+	if (null == arpEntry) { 
+	    return null; 
+	}
+
+	ether.setDestinationMACAddress(arpEntry.getMac().toBytes());
 	return ether;
     }
 
