@@ -3,7 +3,7 @@ package edu.wisc.cs.sdn.vnet.rt;
 import edu.wisc.cs.sdn.vnet.Device;
 import edu.wisc.cs.sdn.vnet.DumpFile;
 import edu.wisc.cs.sdn.vnet.Iface;
-
+import java.util.Arrays;
 import net.floodlightcontroller.packet.*;
 
 /**
@@ -120,6 +120,7 @@ public class Router extends Device
 	if (0 == ipPacket.getTtl()) { 
 	    // create the ICMP message here and return
 	    // TODO
+	    System.out.println("ttl is zero");
 	    createICMPMessage(etherPacket, inIface); 
 	    return; 
 	}
@@ -177,9 +178,9 @@ public class Router extends Device
 
 	this.sendPacket(etherPacket, outIface);
     }
-
+    
     private void createICMPMessage(Ethernet origPacket, Iface inIface) {
-	System.out.println("Inside create ICMP message");
+	System.out.println("-------- Inside create ICMP message ---------");
 	
 	// create new ethernet packet
 	Ethernet ether = createEthernetPacket(origPacket, inIface);
@@ -190,7 +191,6 @@ public class Router extends Device
 	    return;
 	}
 
-
 	IPv4 ip = createIPv4Packet(origPacket, inIface);
 
 	if (null == ip) {
@@ -200,46 +200,50 @@ public class Router extends Device
 	}
 
 	ICMP icmp = createICMPPacket(origPacket);
-	ip.setPayload(icmp);
+	
 	ether.setPayload(ip);
+	ip.setPayload(icmp);
 
-	this.forwardIpPacket(ether, inIface);
+	this.sendPacket(ether, inIface);
+	System.out.println("-------- Done with create ICMP message ---------");
     }
 
     private ICMP createICMPPacket(Ethernet origPacket) {
+	System.out.println("------- Inside createICMPPacket --------");
 	ICMP icmp = new ICMP();
 	icmp.setIcmpType((byte)11);
 	icmp.setIcmpCode((byte)0);
 	
 	Data data = new Data();
-
-	// assigning 20 bytes for 4 (padding) + 8 (ip header) + 8 (extra bytes)
-	byte [] payload = new byte[20];	
 	
-	// setting the ip header and leaving 4 bytes buffer
+	// Getting original 
 	IPv4 ipPacket = (IPv4)origPacket.getPayload();
-	int srcIP = ipPacket.getSourceAddress();
-	payload[4] = (byte) (srcIP >> 24);	
-	payload[5] = (byte) (srcIP >> 16);	
-	payload[6] = (byte) (srcIP >> 8);	
-	payload[7] = (byte) (srcIP);	
-
-	int destIP = ipPacket.getDestinationAddress();
-	payload[8] = (byte) (destIP >> 24);	
-	payload[9] = (byte) (destIP >> 16);	
-	payload[10] = (byte) (destIP >> 8);	
-	payload[11] = (byte) (destIP);	
+	int headerBytes = ipPacket.getHeaderLength() * 4;
+	byte [] ipheaderbytes = ipPacket.serialize(); 
+	
+	// assigning 4 bytes buffer + headerBytes + 8 bytes buffer
+	byte [] payload = new byte[4 + headerBytes + 8];	
+	
+	// Fill the payload array
+	Arrays.fill(payload, 0, 4, (byte)0);
+	for (int i = 0; i < headerBytes + 8; i++) {
+	    payload[i + 4] = ipheaderbytes[i];
+	}
 
 	// set payload for the Data class
 	data.setData(payload);
-	
+	//System.out.println("payload: " + payload.toString());
+
 	// set payload for icmp packet
 	icmp.setPayload(data);
+	System.out.println("------- Done with createICMPPacket --------");
 	return icmp;
     }
 
 
     private IPv4 createIPv4Packet(Ethernet origPacket, Iface inIface) {
+	System.out.println("-------- Inside createIPv4Packet ---------");
+
 	// create new IPv4 Packet
 	IPv4 ip = new IPv4();
 
@@ -258,10 +262,19 @@ public class Router extends Device
 	int destAddr = ipPacket.getSourceAddress();
 	ip.setDestinationAddress(destAddr);
 
+	System.out.println("ttl is " + (int)(ip.getTtl()));
+	System.out.println("Source ip: " + IPv4.fromIPv4Address(ip.getSourceAddress()));
+	System.out.println("dest ip: " + IPv4.fromIPv4Address(ip.getDestinationAddress()));
+	
+
+	//ip.serialize();
+	System.out.println("-------- Done with createIPv4Packet ---------");
 	return ip;
     }
 
     private Ethernet createEthernetPacket(Ethernet origPacket, Iface inIface) {
+	System.out.println("-------- Inside createEthernetPacket ---------");
+	
 	// create new ethernet packet
 	Ethernet ether = new Ethernet();
 
@@ -279,18 +292,9 @@ public class Router extends Device
 
 	// If no entry matched, do nothing
 	if (null == bestmatch) { 
+	    System.out.println("Cannot find the source address in the route table");
 	    return null; 
 	}
-
-	// Make sure we don't sent a packet back out the interface it came in
-	// Ignore this because its going to be the same interface
-	//Iface outIface = bestMatch.getInterface();
-	//if (outIface == inIface) {
-	//    return null; 
-	//}
-
-	// Set source MAC address in Ethernet header
-	//etherPacket.setSourceMACAddress(outIface.getMacAddress().toBytes());
 
 	// If no gateway, then nextHop is IP destination
 	int nextHop = bestmatch.getGatewayAddress();
@@ -301,10 +305,20 @@ public class Router extends Device
 	// Set destination MAC address in Ethernet header
 	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
 	if (null == arpEntry) { 
+	    System.out.println("Cannot find arpentry");
 	    return null; 
 	}
 
 	ether.setDestinationMACAddress(arpEntry.getMac().toBytes());
+	
+	System.out.println("---------------------------------------");
+	System.out.println("Ethernet type: " + ether.getEtherType());
+	System.out.println("Source mac: " + ether.getSourceMAC().toString());
+	System.out.println("Interface mac: " + inIface.getMacAddress().toString());
+	System.out.println("Dest mac: " + ether.getDestinationMAC().toString());
+	System.out.println("---------------------------------------");
+	
+	System.out.println("------- Done with createEthernetPacket ---------");
 	return ether;
     }
 
