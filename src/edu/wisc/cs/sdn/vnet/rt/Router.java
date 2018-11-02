@@ -339,12 +339,16 @@ public class Router extends Device
 	// Find matching route table entry 
 	RouteEntry bestMatch = this.routeTable.lookup(dstAddr);
 
+	System.out.println("bestmatch: " + bestMatch);
+	
 	// If no entry matched, do nothing
 	if (null == bestMatch) { 
 	    createICMPMessage(etherPacket, inIface, (byte)3, (byte)0); 
 	    return; 
 	}
 
+	
+    
 	// Make sure we don't sent a packet back out the interface it came in
 	Iface outIface = bestMatch.getInterface();
 	if (outIface == inIface)
