@@ -250,20 +250,20 @@ public class Router extends Device
 		
 		// TODO: Do echo reply
 		// Uncomment the code below
-		return;
-		//flag = true;
+		//return;
+		flag = true;
 	    }
 	}
 
 	// TODO: Echo reply implementation
-	//if (flag) {
-	//    for (Iface iface : this.interfaces.values()) {
-	//	if (ipPacket.getDestinationAddress() != iface.getIpAddress()) { 
-	//	    processPacketSentToRouter(etherPacket, inIface);   
-	//	}
-	//    }
-	//    return;
-	//} 
+	if (flag) {
+	    for (Iface iface : this.interfaces.values()) {
+		if (ipPacket.getDestinationAddress() != iface.getIpAddress()) { 
+		    processPacketSentToRouter(etherPacket, inIface);   
+		}
+	    }
+	    return;
+	} 
 
 	// Do route lookup and forward
 	this.forwardIpPacket(etherPacket, inIface);
