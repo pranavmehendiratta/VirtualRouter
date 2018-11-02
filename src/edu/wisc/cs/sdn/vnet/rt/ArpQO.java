@@ -23,30 +23,31 @@ class ArpQOData {
 
 
 public class ArpQO {
-    ConcurrentHashMap<Integer, ArpQOData> queue;
+    ConcurrentHashMap<Integer, ArpQOData> packetMap;
     
     public ArpQO() {
-	queue = new ConcurrentHashMap<>();
+	packetMap = new ConcurrentHashMap<>();
     }
 
     public void insert(int ip, Ethernet etherPacket) {
-	if (!queue.containsKey(ip)) {
-	    queue.put(ip, new ArpQOData());
+	if (!packetMap.containsKey(ip)) {
+	    packetMap.put(ip, new ArpQOData());
 	} 
-	queue.get(ip).packets.add(etherPacket);
+	packetMap.get(ip).packets.add(etherPacket);
 
     }
     
     public void timeout(final int ip, final Router router, final Ethernet ether, final Iface inIface) {
-	final ArpQOData data = queue.get(ip);
+	final ArpQOData data = packetMap.get(ip);
 
 	if (data.request) {
+	    System.out.println("exiting in excute for ip: " + IPv4.fromIPv4Address(ip));
 	    return;
 	}
 	
 	if (data.count >= 3 && !data.request) {
 	    // Removing the etherpackets whose ip the router still does not have
-	    queue.remove(ip);
+	    packetMap.remove(ip);
 	    
 	    // Desitnation net unreachable message if the even after 3 requests
 	    // mac address is not available
@@ -63,9 +64,10 @@ public class ArpQO {
     }
 
     public void execute (int ip, Router router, Ethernet ether, Iface inIface) {
-	ArpQOData data = queue.get(ip);
+	ArpQOData data = packetMap.get(ip);
 	
 	if (data.request) {
+	    System.out.println("exiting in excute for ip: " + IPv4.fromIPv4Address(ip));
 	    return;
 	}
 	
@@ -77,7 +79,11 @@ public class ArpQO {
     }
 
     public void print() {
-	System.out.println(Arrays.asList(queue));
+	System.out.println("{");
+	for (int ip : packetMap.keySet()) {
+	    System.out.println("(" + IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString() + 
+	    ")");
+	}
+	System.out.println("}");
     }
-
 }

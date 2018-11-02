@@ -104,19 +104,19 @@ public class Router extends Device
 		this.handleIpPacket(etherPacket, inIface);
 		break;
 	    case Ethernet.TYPE_ARP:
-		short opCode = ((ARP)etherPacket.getPayload()).getOpCode();
-		this.handleARPPacket(etherPacket, inIface, opCode);
+		this.handleARPPacket(etherPacket, inIface);
 		break;
 	}
 
 	/********************************************************************/
     }
 
-    private void handleARPPacket(Ethernet etherPacket, Iface inIface, short opCode) {
+    private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
 	System.out.println("Inside handleARPPacket");
 	
 	// ARP packet
 	ARP arpPacket = (ARP)etherPacket.getPayload();
+	short opCode = arpPacket.getOpCode();
 	
 	// Send a ARP reply if the arp packet contains the opcode of an ARP request
 	if (opCode == ARP.OP_REQUEST) {
@@ -126,8 +126,10 @@ public class Router extends Device
 
 	    System.out.println("ARP.OP_REQUEST");
 
-	    System.out.println("Target ip: " + targetIP);
-	    System.out.println("interface ip: " + inIface.getIpAddress());
+	    System.out.println("Target ip: " + IPv4.fromIPv4Address(targetIP));
+	    System.out.println("interface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()));
+
+	    System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
 
 	    
 	    if (targetIP == inIface.getIpAddress()) {
@@ -156,61 +158,89 @@ public class Router extends Device
 		arp.setSenderProtocolAddress(inIface.getIpAddress());
 		arp.setTargetHardwareAddress(arpPacket.getSenderHardwareAddress());
 		arp.setTargetProtocolAddress(arpPacket.getSenderProtocolAddress());
-		
+	
 		ether.setPayload(arp);
 		
-		if (arpObj.queue.containsKey(targetIP)) {
-		    ArpQOData entry = arpObj.queue.get(targetIP);
-		    
-		    // Prevent more Arp requests from being sent
-		    entry.request = true;
-		    
-		    System.out.println("Reply found for targetIP: " + targetIP);
-		    System.out.println("Current hashmap state is ----> ");
-		    arpObj.print();
-
-		    // Add to Arp cache 
-
-		    // TODO: Make sure to add destination MAC address when ARP request is
-		    // fulfilled
-
-		    // Send all the packets
-
-		    // Remove the key from the hashmap
+		// Set that ARP Request processed
+		if (arpObj.packetMap.containsKey(targetIP)) {
+		    arpObj.packetMap.get(targetIP).request = true;
 		}
-
+		
 		this.sendPacket(ether, inIface);
-
+		System.out.println("Done sending ARP reply");
 	    }
-	} else if (opCode == ARP.OP_REPLY) {
-	    // send arp reply if interface ip = packet ip
-	    int targetIP = ByteBuffer.wrap(arpPacket.getTargetProtocolAddress()).getInt();
+	} else if (opCode == ARP.OP_REPLY){
+	    int targetIP = ByteBuffer.wrap(arpPacket.getSenderProtocolAddress()).getInt();
 	    
-	    // create ethernet packet
-	    Ethernet ether = new Ethernet();
-	    ether.setEtherType(Ethernet.TYPE_ARP);
-
-	    // source mac of the packet - interface on which we received initially
-	    ether.setSourceMACAddress(inIface.getMacAddress().toBytes());
-
-	    // set destination mac
-	    ether.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
-
-	    // Create ARP packet
-	    ARP arp = new ARP();
-	    arp.setOpCode(ARP.OP_REQUEST);
-	    byte [] hardAddr = new byte[6];
-	    Arrays.fill(hardAddr, (byte)0);
-	    arp.setTargetHardwareAddress(hardAddr);
-	    arp.setTargetProtocolAddress(targetIP);
-	    ether.setPayload(arp);
+	    System.out.println("Processing ARP reply for ip: " + IPv4.fromIPv4Address(targetIP));
 	    
-	    // Enqueue the ethernet packet whose next mac address is not available
-	    // send the arp request and wait for the mac address
-	    arpObj.insert(targetIP, etherPacket);
-	    this.sendPacket(ether, inIface);
-	    arpObj.timeout(targetIP, this, ether, inIface);
+
+	    if (arpObj.packetMap.containsKey(targetIP)) {
+	        ArpQOData dataEntry = arpObj.packetMap.get(targetIP);
+
+	        // Prevent more Arp requests from being sent
+	        dataEntry.request = true;
+
+	        arpObj.print();
+
+	        // Add to Arp cache 
+    
+	        // TODO: Make sure to add destination MAC address when ARP request is
+	        // fulfilled
+
+	        // Send all the packets
+
+	        // Remove the key from the hashmap
+	    }
 	}
+    }
+
+    private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
+	System.out.println("Inside generateARPRequests");
+
+	// send arp reply if interface ip = packet ip
+	IPv4 ipPacket = (IPv4)(etherPacket.getPayload());
+	int dstAddr = ipPacket.getDestinationAddress();
+
+	// create ethernet packet
+	Ethernet ether = new Ethernet();
+	ether.setEtherType(Ethernet.TYPE_ARP);
+
+	// source mac of the packet - interface on which we received initially
+	ether.setSourceMACAddress(bestMatchIface.getMacAddress().toBytes());
+
+	// set destination mac
+	ether.setDestinationMACAddress("FF:FF:FF:FF:FF:FF");
+
+	// Create ARP packet
+	ARP arp = new ARP();
+	byte [] hardAddr = new byte[6];
+	Arrays.fill(hardAddr, (byte)0);
+
+	arp.setHardwareType(ARP.HW_TYPE_ETHERNET);
+	arp.setProtocolType(ARP.PROTO_TYPE_IP);
+	arp.setHardwareAddressLength((byte)Ethernet.DATALAYER_ADDRESS_LENGTH);
+	arp.setProtocolAddressLength((byte)4);
+	arp.setOpCode(ARP.OP_REQUEST);
+	arp.setSenderHardwareAddress(bestMatchIface.getMacAddress().toBytes());
+	arp.setSenderProtocolAddress(bestMatchIface.getIpAddress());
+	arp.setTargetHardwareAddress(hardAddr);
+	arp.setTargetProtocolAddress(dstAddr);
+
+	ether.setPayload(arp);
+
+	// Enqueue the ethernet packet whose next mac address is not available
+	// send the arp request and wait for the mac address
+	arpObj.insert(dstAddr, etherPacket);
+
+	//Send first arp request
+	this.sendPacket(ether, bestMatchIface);
+
+	//Wait 1 second respectively for the next 2 subsequent packets.
+	arpObj.timeout(dstAddr, this, ether, bestMatchIface);
+	
+	//this.sendPacket(ether, inIface);
+	System.out.println("Done generating ARP REQUEST for ip: " + IPv4.fromIPv4Address(dstAddr));
     }
 
     private void handleIpPacket(Ethernet etherPacket, Iface inIface)
@@ -247,7 +277,7 @@ public class Router extends Device
 	boolean flag = false;
 	for (Iface iface : this.interfaces.values()) {
 	    if (ipPacket.getDestinationAddress() == iface.getIpAddress()) { 
-		
+
 		// TODO: Do echo reply
 		// Uncomment the code below
 		//return;
@@ -340,15 +370,15 @@ public class Router extends Device
 	RouteEntry bestMatch = this.routeTable.lookup(dstAddr);
 
 	System.out.println("bestmatch: " + bestMatch);
-	
+
 	// If no entry matched, do nothing
 	if (null == bestMatch) { 
 	    createICMPMessage(etherPacket, inIface, (byte)3, (byte)0); 
 	    return; 
 	}
 
-	
-    
+
+
 	// Make sure we don't sent a packet back out the interface it came in
 	Iface outIface = bestMatch.getInterface();
 	if (outIface == inIface)
@@ -365,7 +395,8 @@ public class Router extends Device
 	// Set destination MAC address in Ethernet header
 	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
 	if (null == arpEntry){ 
-	    handleARPPacket(etherPacket, inIface, ARP.OP_REPLY);
+	    generateARPRequests(etherPacket, outIface);
+	    //handleARPPacket(etherPacket, inIface, ARP.OP_REPLY);
 	    return; 
 	}
 	etherPacket.setDestinationMACAddress(arpEntry.getMac().toBytes());
