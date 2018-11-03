@@ -53,8 +53,7 @@ public class Router extends Device
     {
 	if (!routeTable.load(routeTableFile, this))
 	{
-	    System.err.println("Error setting up routing table from file "
-		    + routeTableFile);
+	    System.err.println("Error setting up routing table from file "+ routeTableFile);
 	    System.exit(1);
 	}
 
@@ -72,8 +71,7 @@ public class Router extends Device
     {
 	if (!arpCache.load(arpCacheFile))
 	{
-	    System.err.println("Error setting up ARP cache from file "
-		    + arpCacheFile);
+	    System.err.println("Error setting up ARP cache from file "+ arpCacheFile);
 	    System.exit(1);
 	}
 
@@ -90,14 +88,12 @@ public class Router extends Device
      */
     public void handlePacket(Ethernet etherPacket, Iface inIface)
     {
-	System.out.println("*** -> Received packet: " +
-		etherPacket.toString().replace("\n", "\n\t"));
+	//System.out.println("*** -> Received packet: " + etherPacket.toString().replace("\n", "\n\t"));
 
 	/********************************************************************/
 	/* Adding MacAddresses of the Source IP at the router                                             */
 	for(Iface iface : interfaces.values()) {
-	    System.out.println("mac address: " + iface.getMacAddress() + ", ip: " 
-		+ IPv4.fromIPv4Address(iface.getIpAddress()));
+	    //System.out.println("mac address: " + iface.getMacAddress() + ", ip: " + IPv4.fromIPv4Address(iface.getIpAddress()));
 	    if (arpCache.lookup(iface.getIpAddress()) == null) {
 		arpCache.insert(iface.getMacAddress(), iface.getIpAddress());
 	    }
@@ -117,7 +113,7 @@ public class Router extends Device
     }
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
-	System.out.println("Inside handleARPPacket");
+	//System.out.println("Inside handleARPPacket");
 	
 	// ARP packet
 	ARP arpPacket = (ARP)etherPacket.getPayload();
@@ -129,17 +125,17 @@ public class Router extends Device
 	    // send arp reply if interface ip = packet ip
 	    int targetIP = ByteBuffer.wrap(arpPacket.getTargetProtocolAddress()).getInt();
 
-	    System.out.println("ARP.OP_REQUEST");
+	    //System.out.println("ARP.OP_REQUEST");
 
-	    System.out.println("Target ip: " + IPv4.fromIPv4Address(targetIP));
-	    System.out.println("interface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()));
+	    //System.out.println("Target ip: " + IPv4.fromIPv4Address(targetIP));
+	    //System.out.println("interface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()));
 
-	    System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
+	    //System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
 
 	    
 	    if (targetIP == inIface.getIpAddress()) {
 	   
-		System.out.println("TargetIP = Interface IP");
+		//System.out.println("TargetIP = Interface IP");
 
 		// create ethernet packet
 		Ethernet ether = new Ethernet();
@@ -172,12 +168,12 @@ public class Router extends Device
 		}
 		
 		this.sendPacket(ether, inIface);
-		System.out.println("Done sending ARP reply");
+		//System.out.println("Done sending ARP reply");
 	    }
 	} else if (opCode == ARP.OP_REPLY){
 	    int targetIP = ByteBuffer.wrap(arpPacket.getSenderProtocolAddress()).getInt();
 	    
-	    System.out.println("Processing ARP reply for ip: " + IPv4.fromIPv4Address(targetIP));
+	    //System.out.println("Processing ARP reply for ip: " + IPv4.fromIPv4Address(targetIP));
 	    
 
 	    if (arpObj.packetMap.containsKey(targetIP)) {
@@ -205,7 +201,7 @@ public class Router extends Device
     }
 
     private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
-	System.out.println("Inside generateARPRequests");
+	//System.out.println("Inside generateARPRequests");
 
 	// send arp reply if interface ip = packet ip
 	IPv4 ipPacket = (IPv4)(etherPacket.getPayload());
@@ -243,14 +239,14 @@ public class Router extends Device
 	arpObj.insert(dstAddr, etherPacket);
 
 	//Send first arp request
-	System.out.println("Attemp 1 at finding mac address");
+	//System.out.println("Attemp 1 at finding mac address");
 	this.sendPacket(ether, bestMatchIface);
 
 	//Wait 1 second respectively for the next 2 subsequent packets.
 	arpObj.timeout(dstAddr, this, ether, bestMatchIface);
 	
 	//this.sendPacket(ether, inIface);
-	System.out.println("Done generating ARP REQUEST for ip: " + IPv4.fromIPv4Address(dstAddr));
+	//System.out.println("Done generating ARP REQUEST for ip: " + IPv4.fromIPv4Address(dstAddr));
     }
 
     private void handleIpPacket(Ethernet etherPacket, Iface inIface)
@@ -261,7 +257,7 @@ public class Router extends Device
 
 	// Get IP header
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
-	System.out.println("Handle IP packet");
+	//System.out.println("Handle IP packet");
 
 	if (arpCache.lookup(ipPacket.getSourceAddress()) == null) {
 	    arpCache.insert(etherPacket.getSourceMAC(), ipPacket.getSourceAddress());
@@ -314,7 +310,7 @@ public class Router extends Device
     }
 
     private void processPacketSentToRouter(Ethernet etherPacket, Iface inIface) {
-	System.out.println("In ProcessPacketSentToRouter");
+	//System.out.println("In ProcessPacketSentToRouter");
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
 	byte protocol = ipPacket.getProtocol();
 	if (protocol == IPv4.PROTOCOL_UDP || protocol == IPv4.PROTOCOL_TCP) {
@@ -329,13 +325,12 @@ public class Router extends Device
 
     private void processEchoRequest(Ethernet etherPacket, Iface inIface, byte type, byte code) {
 
-	System.out.println("Inside processEchoRequest");
+	//System.out.println("Inside processEchoRequest");
 
 	Ethernet ether = createEthernetPacket(etherPacket, inIface);
 
 	if (null == ether) {
-	    System.out.println("Cannot create ether packet. Returning from process" +
-		    "EchoRequest");
+	    //System.out.println("Cannot create ether packet. Returning from process" + "EchoRequest");
 	    return;
 	}
 
@@ -373,7 +368,7 @@ public class Router extends Device
 	// Make sure it's an IP packet
 	if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4)
 	{ return; }
-	System.out.println("Forward IP packet");
+	//System.out.println("Forward IP packet");
 
 	// Get IP header
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
@@ -382,7 +377,7 @@ public class Router extends Device
 	// Find matching route table entry 
 	RouteEntry bestMatch = this.routeTable.lookup(dstAddr);
 
-	System.out.println("bestmatch: " + bestMatch);
+	//System.out.println("bestmatch: " + bestMatch);
 
 	// If no entry matched, do nothing
 	if (null == bestMatch) { 
@@ -414,27 +409,25 @@ public class Router extends Device
 	}
 	etherPacket.setDestinationMACAddress(arpEntry.getMac().toBytes());
 	this.sendPacket(etherPacket, outIface);
-	System.out.println("Done forwarding the packet");
+	//System.out.println("Done forwarding the packet");
     }
 
     public void createICMPMessage(Ethernet origPacket, Iface inIface, byte type, byte code) {
 	// create new ethernet packet
-	System.out.println("Inside createICMPMessage");
+	//System.out.println("Inside createICMPMessage");
 	Ethernet ether = createEthernetPacket(origPacket, inIface);
 
-	System.out.println(arpCache.toString());
+	//System.out.println(arpCache.toString());
 
 	if (null == ether) {
-	    System.out.println("Cannot create ether packet. Returning from create"
-		    + "ICMPMessage");
+	    //System.out.println("Cannot create ether packet. Returning from create"+ "ICMPMessage");
 	    return;
 	}
 
 	IPv4 ip = createIPv4Packet(origPacket, inIface);
 
 	if (null == ip) {
-	    System.out.println("Cannot create ip packet. Returning from create"
-		    + "ICMPMessage");
+	    //System.out.println("Cannot create ip packet. Returning from create"+ "ICMPMessage");
 	    return;
 	}
 
@@ -442,8 +435,7 @@ public class Router extends Device
 	ether.setPayload(ip);
 	ip.setPayload(icmp);
 	
-	System.out.println("iface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()) +
-	", iface mac: " + inIface.getMacAddress().toString());
+	//System.out.println("iface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()) + ", iface mac: " + inIface.getMacAddress().toString());
 	
 	this.sendPacket(ether, inIface);
     }
@@ -519,7 +511,7 @@ public class Router extends Device
 
 	// If no entry matched, do nothing
 	if (null == bestmatch) { 
-	    System.out.println("Cannot find the source address in the route table");
+	    //System.out.println("Cannot find the source address in the route table");
 	    return null; 
 	}
 
@@ -532,7 +524,7 @@ public class Router extends Device
 	// Set destination MAC address in Ethernet header
 	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
 	if (null == arpEntry) { 
-	    System.out.println("Cannot find arp entry");
+	    //System.out.println("Cannot find arp entry");
 	    return null; 
 	}
 

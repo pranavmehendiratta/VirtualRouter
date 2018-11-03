@@ -52,9 +52,7 @@ public class ArpQO {
 	}
 	
 	if (data.count >= 3 && !data.request) {
-	    // Removing the etherpackets whose ip the router still does not have
-	    
-	    // Desitnation net unreachable message if the even after 3 requests
+	    // Desitnation net unreachable message if even after 3 requests
 	    // mac address is not available
 	    
 	    //data.printPacketQueue();
