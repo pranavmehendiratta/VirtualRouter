@@ -16,12 +16,6 @@ class ArpQOData {
 	packets = new LinkedList<>();
     }
 
-    public void printPacketQueue() {
-	for(Ethernet e : packets) { 
-	    System.out.println(e); 
-	}
-    }
-
     public String toString() {
 	return ("request: " + request + ", count: " + count);
     }
@@ -53,37 +47,15 @@ public class ArpQO {
 	
 	if (data.count >= 3 && !data.request) {
 	    // Removing the etherpackets whose ip the router still does not have
+	    packetMap.remove(ip);
 	    
 	    // Desitnation net unreachable message if the even after 3 requests
 	    // mac address is not available
-	    
-	    //data.printPacketQueue();
-
 	    Ethernet packet = data.packets.remove();
-
-	    System.out.println("packet being sent for ICMP request is");
-	    System.out.println(packet.toString());
-
-	    IPv4 ipPacket = (IPv4)packet.getPayload();
-	    int srcAddr = ipPacket.getSourceAddress();
-	    RouteEntry bestmatch = router.getRouteTable().lookup(srcAddr);
-
-	    // If no entry matched, do nothing
-	    if (null == bestmatch) { 
-		System.out.println("Cannot find the source address in the route table");
-		return; 
-	    }   
-	    
-	    Iface outIface = bestmatch.getInterface();
-
-	    router.createICMPMessage(packet, outIface, (byte)3, (byte)1); 
-
-	    if (data.packets.isEmpty()) {
-	        packetMap.remove(ip);
-	    }
+	    router.createICMPMessage(packet, inIface, (byte)3, (byte)1); 
 	    return;
 	}
-
+	
 	new Timer().schedule(
 	    new TimerTask() {
 		public void run() {
@@ -94,18 +66,12 @@ public class ArpQO {
 
     public void execute (int ip, Router router, Ethernet ether, Iface inIface) {
 	ArpQOData data = packetMap.get(ip);
-
-	if (data == null) {
-	    return;
-	}
-
-	System.out.println("Attemp " + data.count  + "  at finding mac address"); 
-
+	
 	if (data.request) {
 	    System.out.println("exiting in excute for ip: " + IPv4.fromIPv4Address(ip));
 	    return;
 	}
-
+	
 	if (!data.request && data.count < 3) {
 	    router.sendPacket(ether, inIface);
 	    data.count++;
@@ -117,7 +83,7 @@ public class ArpQO {
 	System.out.println("{");
 	for (int ip : packetMap.keySet()) {
 	    System.out.println("(" + IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString() + 
-		    ")");
+	    ")");
 	}
 	System.out.println("}");
     }
