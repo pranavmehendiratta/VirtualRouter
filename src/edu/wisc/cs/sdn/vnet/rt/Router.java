@@ -29,6 +29,8 @@ public class Router extends Device implements Runnable
     /** Thread for sending unsolicited RIP responses */
     private Thread ripThread;
 
+    public static final String RIP_IP_ADDRESS = "224.0.0.9";
+
     /**
      * Creates a router for a specific host.
      * @param host hostname for the router
@@ -117,7 +119,7 @@ public class Router extends Device implements Runnable
 
     public Ethernet constructRipBroadcastMessage(Iface iface, boolean init) {
 	String destMac = "FF:FF:FF:FF:FF:FF";
-	String destIp = "224.0.0.9";
+	String destIp = RIP_IP_ADDRESS;
 	return constructRipIPv4Packet(iface, destMac, destIp, init);
     }
 
@@ -235,16 +237,21 @@ public class Router extends Device implements Runnable
 	/********************************************************************/
 	/* Adding MacAddresses of the Source IP at the router                                             */
 	for(Iface iface : interfaces.values()) {
-	    //System.out.println("mac address: " + iface.getMacAddress() + ", ip: " + IPv4.fromIPv4Address(iface.getIpAddress()));
 	    if (arpCache.lookup(iface.getIpAddress()) == null) {
 		arpCache.insert(iface.getMacAddress(), iface.getIpAddress());
 	    }
 	}
 
+	
+
 	switch(etherPacket.getEtherType())
 	{
 	    case Ethernet.TYPE_IPv4:
-		this.handleIpPacket(etherPacket, inIface);
+		if (isRIPpacket(etherPacket)) {
+		    System.out.println("Getting periodic RIP update");
+		} else {
+		    this.handleIpPacket(etherPacket, inIface);
+		}
 		break;
 	    case Ethernet.TYPE_ARP:
 		this.handleARPPacket(etherPacket, inIface);
@@ -252,6 +259,28 @@ public class Router extends Device implements Runnable
 	}
 
 	/********************************************************************/
+    }
+
+    public void processRIPpacket(Ethernet etherPacket) {
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	UDP udp = (UDP)ipPacket.getPayload();
+	RIPv2 ripTable = (RIPv2)udp.getPayload();
+	
+    }
+
+    public boolean isRIPpacket(Ethernet etherPacket) {
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	if (ipPacket.getDestinationAddress() != IPv4.toIPv4Address(RIP_IP_ADDRESS)) {
+	    return false;
+	}
+	if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
+	    return false;
+	}
+	UDP udp = (UDP)ipPacket.getPayload();
+	if (!(udp.getSourcePort() == UDP.RIP_PORT && udp.getDestinationPort() == UDP.RIP_PORT)) {
+	    return false;
+	}
+	return true;
     }
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
