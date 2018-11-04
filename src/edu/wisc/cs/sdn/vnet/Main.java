@@ -4,6 +4,7 @@ import edu.wisc.cs.sdn.vnet.rt.Router;
 import edu.wisc.cs.sdn.vnet.sw.Switch;
 import edu.wisc.cs.sdn.vnet.vns.Command;
 import edu.wisc.cs.sdn.vnet.vns.VNSComm;
+import net.floodlightcontroller.packet.IPv4;
 
 public class Main 
 {
@@ -86,8 +87,13 @@ public class Main
 		if (dev instanceof Router) 
 		{
 			// Read static route table
-			if (routeTableFile != null)
-			{ ((Router)dev).loadRouteTable(routeTableFile); }
+			if (routeTableFile != null) { 
+			    ((Router)dev).loadRouteTable(routeTableFile, true); 
+			} else {
+			    System.out.println("Creating our own route table");
+			    String routeTable = initalizeRouteTable((Router)dev);
+			    ((Router)dev).loadRouteTable(routeTable, false); 
+			}
 			
 			// Read static ACP cache
 			if (arpCacheFile != null)
@@ -101,7 +107,22 @@ public class Main
 		// Shutdown the router
 		dev.destroy();
 	}
-	
+
+	static String initalizeRouteTable(Router router) {
+	    StringBuilder sb = new StringBuilder();
+	    for(Iface iface : router.interfaces.values()) {
+		sb.append(IPv4.fromIPv4Address(iface.getIpAddress() & iface.getSubnetMask()));
+		sb.append(" ");
+		sb.append("0.0.0.0");
+		sb.append(" ");
+		sb.append(IPv4.fromIPv4Address(iface.getSubnetMask()));	
+		sb.append(" ");
+		sb.append(iface.getName());
+		sb.append("#");
+	    }
+	    return sb.toString();
+	}
+
 	static void usage()
 	{
 		System.out.println("Virtual Network Client");
