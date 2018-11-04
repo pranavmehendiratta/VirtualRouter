@@ -90,6 +90,7 @@ public class Router extends Device implements Runnable
     }
 
     public void sendUnsolicitedRipResponse(boolean init) {
+	ripEntryTable.print();
 	Map<String, Iface> interfaces = this.getInterfaces();
 	for (String ifaceName : interfaces.keySet()) {
 	    Iface iface = interfaces.get(ifaceName);
@@ -156,12 +157,14 @@ public class Router extends Device implements Runnable
 	return ether;
     }
 
+    public String getRipTableEntryKey(String ip, String mask) {
+	return ip + "#" + mask; 
+    }
+ 
 
     public RIPv2 constructRipv2Packet(Iface iface, boolean init) {
 	RIPv2 ripPacket = new RIPv2();
 	ripPacket.setCommand(RIPv2.COMMAND_RESPONSE);
-	
-	ripEntryTable.print();
 	
 	for (RouteEntry entry : routeTable.getEntries()) {
 	    if (entry == null) {
@@ -172,21 +175,32 @@ public class Router extends Device implements Runnable
 	    int mask = entry.getMaskAddress();
 	    int nextHopAddr = iface.getIpAddress();
 	    int metric;
-
+	    
+	    String key = getRipTableEntryKey(IPv4.fromIPv4Address(entry.getDestinationAddress()),
+			IPv4.fromIPv4Address(entry.getMaskAddress()));
+	    
 	    // TODO: check if race condition can occur
 	    if (!init) {
-		RIPv2Entry tableEntry = ripEntryTable.checkIfEntryExists(entry, null);
-		metric = ripEntryTable.getEntryData(tableEntry).metric;
+		RIPv2EntryData tableEntryData = ripEntryTable.ripDataTable.get(key);
+		
+		if (tableEntryData == null) {
+		    continue;
+		}
+
+		metric = tableEntryData.metric;
 	    } else {
 		metric = 1;
+		ripEntryTable.insert(key, metric); 
+		ripEntryTable.routerInterfaces.put(key, 1);
 	    }	
-
-	    // Add each RIPv2Entry to ripDataTable
+	    
 	    RIPv2Entry ripEntry = new RIPv2Entry(ip, mask, metric);
 	    ripEntry.setNextHopAddress(nextHopAddr);
-	    
-	    ripEntryTable.insert(ripEntry, metric); 
+
+	    // Add each RIPv2Entry to ripDataTable
 	    ripPacket.addEntry(ripEntry);
+	   
+    
 	}
 	return ripPacket;
     }
