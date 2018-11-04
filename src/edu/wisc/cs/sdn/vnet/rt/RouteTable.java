@@ -45,14 +45,18 @@ public class RouteTable
 	    /*****************************************************************/
 	    /* TODO: Find the route entry with the longest prefix match      */
 
+	    System.out.println("Inside routeTable lookup. ip: " + IPv4.fromIPv4Address(ip));
 	    RouteEntry bestMatch = null;
 	    for (RouteEntry entry : this.entries)
 	    {
 		int maskedDst = ip & entry.getMaskAddress();
 		int entrySubnet = entry.getDestinationAddress() 
 		    & entry.getMaskAddress();
+		System.out.println("maskedDst: " + IPv4.fromIPv4Address(maskedDst));
+		System.out.println("entrySubnet: " + IPv4.fromIPv4Address(entrySubnet));
 		if (maskedDst == entrySubnet)
 		{
+		    System.out.println("Subnet number is equal");
 		    if ((null == bestMatch) 
 			    || (entry.getMaskAddress() > bestMatch.getMaskAddress()))
 		    { bestMatch = entry; }

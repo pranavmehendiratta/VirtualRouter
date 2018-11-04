@@ -54,7 +54,7 @@ public class ArpQO {
 	if (data.count >= 3 && !data.request) {
 	    // Desitnation net unreachable message if even after 3 requests
 	    // mac address is not available
-	    
+
 	    //data.printPacketQueue();
 
 	    Ethernet packet = data.packets.remove();
@@ -71,21 +71,20 @@ public class ArpQO {
 		System.out.println("Cannot find the source address in the route table");
 		return; 
 	    }   
-	    
-	    Iface outIface = bestmatch.getInterface();
 
+	    Iface outIface = bestmatch.getInterface();
 	    router.createICMPMessage(packet, outIface, (byte)3, (byte)1); 
 
 	    if (data.packets.isEmpty()) {
-	        packetMap.remove(ip);
+		packetMap.remove(ip);
 	    }
 	    return;
 	}
 
 	new Timer().schedule(
-	    new TimerTask() {
-		public void run() {
-		    execute(ip, router, ether, inIface);
+		new TimerTask() {
+		    public void run() {
+			execute(ip, router, ether, inIface);
 		}
 	    }, 1000);
     }

@@ -250,6 +250,7 @@ public class Router extends Device implements Runnable
 		    System.out.println("Getting periodic RIP update");
 		    processRIPpacket(etherPacket, inIface);
 		} else {
+		    System.out.println("Found ping/traceroute packet");
 		    this.handleIpPacket(etherPacket, inIface);
 		}
 		break;
@@ -292,8 +293,10 @@ public class Router extends Device implements Runnable
 	    }
 	} 
     
-	System.out.println("Updated route table");
-	System.out.print(this.routeTable.toString());
+	System.out.println("<--- Updated route table --->");
+	System.out.println(this.routeTable.toString());
+	System.out.println("<--- Current arp cache --->");
+	System.out.println(this.arpCache.toString());
     }
 
     public boolean isRIPpacket(Ethernet etherPacket) {
@@ -391,7 +394,7 @@ public class Router extends Device implements Runnable
     }
 
     private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
-	//System.out.println("Inside generateARPRequests");
+	System.out.println("----- Inside generateARPRequests -----");
 
 	// send arp reply if interface ip = packet ip
 	IPv4 ipPacket = (IPv4)(etherPacket.getPayload());
@@ -422,6 +425,9 @@ public class Router extends Device implements Runnable
 	arp.setTargetHardwareAddress(hardAddr);
 	arp.setTargetProtocolAddress(dstAddr);
 
+	System.out.println("Bestmatch interface: " + bestMatchIface);
+
+
 	ether.setPayload(arp);
 
 	// Enqueue the ethernet packet whose next mac address is not available
@@ -429,7 +435,7 @@ public class Router extends Device implements Runnable
 	arpObj.insert(dstAddr, etherPacket);
 
 	//Send first arp request
-	//System.out.println("Attemp 1 at finding mac address");
+	System.out.println("Attempt 0 at finding mac address");
 	this.sendPacket(ether, bestMatchIface);
 
 	//Wait 1 second respectively for the next 2 subsequent packets.
@@ -547,7 +553,7 @@ public class Router extends Device implements Runnable
 	icmp.setIcmpCode(code);
 
 	// TODO: Check this again, checksum
-	icmp.setPayload(((ICMP)ipPacket.getPayload()).getPayload());
+	icmp.setPayload(ipPacket.getPayload());
 	ip.setPayload(icmp);
 	ether.setPayload(ip);
 
@@ -566,6 +572,8 @@ public class Router extends Device implements Runnable
 	int dstAddr = ipPacket.getDestinationAddress();
 
 	// Find matching route table entry 
+	System.out.println("dstAddr: " + IPv4.fromIPv4Address(dstAddr));	
+	System.out.println(arpCache.toString());
 	RouteEntry bestMatch = this.routeTable.lookup(dstAddr);
 
 	//System.out.println("bestmatch: " + bestMatch);
