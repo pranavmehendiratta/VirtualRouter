@@ -92,7 +92,7 @@ public class Router extends Device implements Runnable
     }
 
     public void sendUnsolicitedRipResponse(boolean init) {
-	ripEntryTable.print();
+	//ripEntryTable.print();
 	Map<String, Iface> interfaces = this.getInterfaces();
 	for (String ifaceName : interfaces.keySet()) {
 	    Iface iface = interfaces.get(ifaceName);
@@ -192,8 +192,9 @@ public class Router extends Device implements Runnable
 		metric = tableEntryData.metric;
 	    } else {
 		metric = 1;
-		ripEntryTable.insert(key, metric); 
-		ripEntryTable.routerInterfaces.put(key, 1);
+		if(ripEntryTable.insert(key, metric)) { 
+		    ripEntryTable.routerInterfaces.put(key, 1);
+		}
 	    }	
 	    
 	    RIPv2Entry ripEntry = new RIPv2Entry(ip, mask, metric);
@@ -201,8 +202,6 @@ public class Router extends Device implements Runnable
 
 	    // Add each RIPv2Entry to ripDataTable
 	    ripPacket.addEntry(ripEntry);
-	   
-    
 	}
 	return ripPacket;
     }
@@ -249,6 +248,7 @@ public class Router extends Device implements Runnable
 	    case Ethernet.TYPE_IPv4:
 		if (isRIPpacket(etherPacket)) {
 		    System.out.println("Getting periodic RIP update");
+		    processRIPpacket(etherPacket, inIface);
 		} else {
 		    this.handleIpPacket(etherPacket, inIface);
 		}
@@ -261,13 +261,39 @@ public class Router extends Device implements Runnable
 	/********************************************************************/
     }
 
-    public void processRIPpacket(Ethernet etherPacket) {
+    public void processRIPpacket(Ethernet etherPacket, Iface inIface) {
+	boolean sendTriggeredUpdate = false;
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
 	UDP udp = (UDP)ipPacket.getPayload();
 	RIPv2 ripTable = (RIPv2)udp.getPayload();
-    
-	
+	List<RIPv2Entry> entries = ripTable.getEntries();    
+	for (RIPv2Entry entry : entries) {
+	    int nextHopAddress = entry.getNextHopAddress();
+	    int address = entry.getAddress();
+	    int mask = entry.getSubnetMask();
+	    int metric = entry.getMetric();
 
+	    //System.out.println("nextHopAddress: " + IPv4.fromIPv4Address(nextHopAddress) + 
+	    //", address: " + IPv4.fromIPv4Address(address) + ", mask: " + IPv4.fromIPv4Address(mask)
+	    //+ ", metric: " + metric + ", inIface address: " + 
+	    //IPv4.fromIPv4Address(inIface.getIpAddress()) + ", inIface subnetmask: " + 
+	    //IPv4.fromIPv4Address(inIface.getSubnetMask()) + ", inIface name: " + inIface.getName());
+
+	    String ripEntryKey = getRipTableEntryKey(IPv4.fromIPv4Address(address), 
+				    IPv4.fromIPv4Address(mask)); 
+	    
+	    boolean insertionResult = ripEntryTable.insert(ripEntryKey, metric + 1);
+	    System.out.println("insertionResult: " + insertionResult);
+
+	    if (insertionResult) {
+		System.out.println("Updating the route table as well");
+		routeTable.remove(address, mask);
+		routeTable.insert(address, nextHopAddress, mask, inIface);
+	    }
+	} 
+    
+	System.out.println("Updated route table");
+	System.out.print(this.routeTable.toString());
     }
 
     public boolean isRIPpacket(Ethernet etherPacket) {
@@ -520,7 +546,8 @@ public class Router extends Device implements Runnable
 	icmp.setIcmpType(type);
 	icmp.setIcmpCode(code);
 
-	icmp.setPayload(ipPacket.getPayload());
+	// TODO: Check this again, checksum
+	icmp.setPayload(((ICMP)ipPacket.getPayload()).getPayload());
 	ip.setPayload(icmp);
 	ether.setPayload(ip);
 

@@ -8,7 +8,7 @@ public class RIPv2EntryDataTable implements Runnable {
     ConcurrentHashMap<String, RIPv2EntryData> ripDataTable;
     ConcurrentHashMap<String, Integer> routerInterfaces;
     private Thread timeoutThread; 
-    private RouteTable routeTable;
+    //private RouteTable routeTable; // #delete
     public static final long TIMEOUT = 30000; // 30 seconds
 
     public RIPv2EntryDataTable(RouteTable rt) {
@@ -16,22 +16,22 @@ public class RIPv2EntryDataTable implements Runnable {
 	routerInterfaces = new ConcurrentHashMap<>();
 	timeoutThread = new Thread(this);
 	timeoutThread.start();
-	routeTable = rt;
+	//routeTable = rt; // #delete
     }
 
-    public void insert(String entry, int metric) {
+    public boolean insert(String entry, int metric) {
 	if (routerInterfaces.containsKey(entry)) {
-	    return;
+	    return false;
 	}
 	
 	System.out.println("Inside insert -> Entry: " + entry + ", metric: " + metric); 
 	
 	if (!ripDataTable.containsKey(entry)) {
 	    ripDataTable.put(entry, new RIPv2EntryData(metric));
+	    return true;
 	} else {
 	    ripDataTable.get(entry).update(metric); 
-	    // update route table as well
-	    
+	    return false;
 	}    
     }
 
@@ -51,8 +51,7 @@ public class RIPv2EntryDataTable implements Runnable {
 		// Do nothing here 
 	    }
 
-	    System.out.println("Attempting to remove the expired entries. time: " + count + "s");
-	    count++;
+	    //System.out.println("Attempting to remove the expired entries. time: " + count++ + "s");
 	    
 	    // Try removing the entries
 	    for (String entry : ripDataTable.keySet()) {
