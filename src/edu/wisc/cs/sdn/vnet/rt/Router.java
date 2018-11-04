@@ -265,7 +265,9 @@ public class Router extends Device implements Runnable
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
 	UDP udp = (UDP)ipPacket.getPayload();
 	RIPv2 ripTable = (RIPv2)udp.getPayload();
+    
 	
+
     }
 
     public boolean isRIPpacket(Ethernet etherPacket) {
@@ -295,15 +297,6 @@ public class Router extends Device implements Runnable
 
 	    // send arp reply if interface ip = packet ip
 	    int targetIP = ByteBuffer.wrap(arpPacket.getTargetProtocolAddress()).getInt();
-
-	    //System.out.println("ARP.OP_REQUEST");
-
-	    //System.out.println("Target ip: " + IPv4.fromIPv4Address(targetIP));
-	    //System.out.println("interface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()));
-
-	    //System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
-
-	    
 	    if (targetIP == inIface.getIpAddress()) {
 	   
 		//System.out.println("TargetIP = Interface IP");
