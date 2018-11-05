@@ -201,7 +201,6 @@ public class Router extends Device
     }
 
     private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
-	//System.out.println("Inside generateARPRequests");
 
 	// send arp reply if interface ip = packet ip
 	IPv4 ipPacket = (IPv4)(etherPacket.getPayload());
@@ -243,7 +242,7 @@ public class Router extends Device
 	this.sendPacket(ether, bestMatchIface);
 
 	//Wait 1 second respectively for the next 2 subsequent packets.
-	arpObj.timeout(dstAddr, this, ether, bestMatchIface);
+	//arpObj.timeout(dstAddr, this, ether, bestMatchIface);
 	
 	//this.sendPacket(ether, inIface);
 	//System.out.println("Done generating ARP REQUEST for ip: " + IPv4.fromIPv4Address(dstAddr));
