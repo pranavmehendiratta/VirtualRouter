@@ -114,10 +114,16 @@ public class Router extends Device
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
 	
-	System.out.println("Inside handleARPPacket");
+	System.out.println("------ handleARPRequests: All interfaces of the current router ------");
+	for (Iface iface : this.interfaces.values()) {
+	    System.out.println(iface.toString());
+	}
+	System.out.println("---------------------ARP request packet------------------------------");
 	System.out.println(etherPacket.toString());
+	System.out.println("---------------------------------------------------------------------");
+	
 
-	arpObj.print();
+	//arpObj.print();
 
 	// ARP packet
 	ARP arpPacket = (ARP)etherPacket.getPayload();
@@ -134,30 +140,8 @@ public class Router extends Device
 
 	    //System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
 
-	//    System.out.println("targetIP & inIface: " + 
-	//			IPv4.fromIPv4Address(targetIP & inIface.getSubnetMask()));
-	//    
-	//    System.out.println("targetIP & inIface: " + 
-	//			IPv4.fromIPv4Address(inIface.getIpAddress() & inIface.getSubnetMask()));
-	   // Iface bestMatchIface = null;
-	   // int max = -1;
-	   // for (String ifaceName: this.getInterfaces().keySet()) {
-	   //     Iface iface = this.getInterfaces().get(ifaceName);
-	   //     int subnet = iface.getSubnetMask();
-	   //     if ((targetIP & subnet) == (iface.getIpAddress() & subnet)) {
-	   //         if (max < iface.getIpAddress()) {
-	   //     	bestMatchIface = iface; 
-	   //     	max = iface.getIpAddress();
-	   //         }
-	   //     }
-	   // }
-	   //     		
-	   // System.out.println("bestMatch interface for IP: " + IPv4.fromIPv4Address(targetIP));
-	   // System.out.println(bestMatchIface.toString());
-	    
-
 	    if (targetIP == inIface.getIpAddress()) {
-	   
+		
 		// create ethernet packet
 		Ethernet ether = new Ethernet();
 		ether.setEtherType(Ethernet.TYPE_ARP);
@@ -183,18 +167,22 @@ public class Router extends Device
 	
 		ether.setPayload(arp);
 		
+		arpCache.insert(new MACAddress(etherPacket.getSourceMACAddress()), 
+				    IPv4.toIPv4Address(arpPacket.getSenderProtocolAddress()));
+	   
+		
 		// Set that ARP Request processed
 		if (arpObj.packetMap.containsKey(targetIP)) {
 		    arpObj.packetMap.get(targetIP).request = true;
 		}
 		
 		this.sendPacket(ether, inIface);
-		//System.out.println("Done sending ARP reply");
+		System.out.println("Done sending ARP reply");
 	    } else {
 		System.out.println("targetIP is not equal to inIface IP");
 		// Find the best out interface and generate another request
 		
-		generateARPRequests(etherPacket, inIface);
+		//generateARPRequests(etherPacket, inIface);
 	    }
 	} else if (opCode == ARP.OP_REPLY){
 	    int targetIP = ByteBuffer.wrap(arpPacket.getSenderProtocolAddress()).getInt();
@@ -222,6 +210,8 @@ public class Router extends Device
 		arpObj.packetMap.remove(targetIP);
 	    }
 	}
+
+	arpObj.print();
     }
 
     private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
@@ -252,6 +242,21 @@ public class Router extends Device
 	arp.setOpCode(ARP.OP_REQUEST);
 	arp.setSenderHardwareAddress(bestMatchIface.getMacAddress().toBytes());
 	arp.setSenderProtocolAddress(bestMatchIface.getIpAddress());
+	
+	//RouteEntry bestmatch = this.routeTable.lookup(dstAddr);
+
+	//// If no entry matched, do nothing
+	//if (null == bestmatch) { 
+	//    System.out.println("GenerateARPRequest: Cannot find the source address in the route table");
+	//    return; 
+	//}
+
+	//System.out.println("bestmatche for ip: ");
+	//System.out.println(bestMatchIface);
+
+	System.out.println("dstAddr: " + IPv4.fromIPv4Address(dstAddr) + ", hardAddr: " +
+	    MACAddress.valueOf(hardAddr));
+
 	arp.setTargetHardwareAddress(hardAddr);
 	arp.setTargetProtocolAddress(dstAddr);
 
@@ -404,8 +409,8 @@ public class Router extends Device
 
 	// Make sure we don't sent a packet back out the interface it came in
 	Iface outIface = bestMatch.getInterface();
-	if (outIface == inIface)
-	{ return; }
+	//if (outIface == inIface)
+	//{ return; }
 
 	// Set source MAC address in Ethernet header
 	etherPacket.setSourceMACAddress(outIface.getMacAddress().toBytes());
