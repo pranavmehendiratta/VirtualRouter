@@ -171,14 +171,13 @@ public class ArpQO { // implements Runnable {
 	} 
 	timeout(ip, router, ether, inIface);
     }
-
-    public void print() {
-	System.out.println("{");
-	for (int ip : packetMap.keySet()) {
-	    System.out.println("(" + IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString() + 
-		    ")");
-	}
-	System.out.println("}");
-    }
     */
+    public void print() {
+	System.out.println("---------------- ARP Table -------------------");
+	for (int ip : packetMap.keySet()) {
+	    System.out.println(IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString());
+	}
+	System.out.println("----------------------------------------------");
+    }
+    
 }
