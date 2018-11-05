@@ -54,10 +54,10 @@ public class ArpQO { // implements Runnable {
     //ConcurrentHashMap<Integer, Thread> threadMap;
     private Router router;
 
-    public ArpQO(Router r) {
+    public ArpQO() {
 	packetMap = new ConcurrentHashMap<>();
 	//attemptThread = new Thread(this);
-	this.router = r;
+	// this.router = r;
     }
 
     public void insert(int ip, Ethernet etherPacket) {
