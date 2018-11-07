@@ -5,12 +5,15 @@ import net.floodlightcontroller.packet.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-class ArpQOData { // implements Runnable {
+class ArpQOData implements Runnable{ // implements Runnable {
     boolean request;
     int count;   
     Queue<Ethernet> packets;
+    Iface outIface;
+    Ethernet arpRequest;
+    private Router router;
     //Thread attemptThread;
-    
+
     // Thread setup parameters
     //Router router;
     //Ethernet arpRequest;
@@ -26,84 +29,133 @@ class ArpQOData { // implements Runnable {
     //    System.out.println("ArpQOData thread execute function");	
     //}
 
-    ArpQOData() {
-	request = false;
-	count = 1;
-	packets = new LinkedList<>();
-	//attemptThread = new Thread(this);
+    ArpQOData(Router router) {
+        request = false;
+        count = 0;
+        packets = new ConcurrentLinkedQueue<>();
+        this.router=router;
+        //attemptThread = new Thread(this);
     }
 
     public void printPacketQueue() {
-	for(Ethernet e : packets) { 
-	    System.out.println(e); 
-	}
+        for(Ethernet e : packets) { 
+            System.out.println(e); 
+        }
     }
 
     public String toString() {
-	return ("request: " + request + ", count: " + count);
+        return ("request: " + request + ", count: " + count);
+    }
+
+    @Override
+    public void run() {
+        while(count < 3 && !request) {
+            count++;
+	        System.out.println("Sending Request No: " + count);      
+            router.sendPacket(arpRequest, outIface);
+            try {
+                Thread.sleep(1000); 
+            } catch (InterruptedException e) {
+
+            }
+        }
+
+        if(!request)
+            this.createICMP();
+
+    }
+
+    public void createICMP() {
+        if(count < 3 && !request) {
+            Ethernet packet = packets.remove();
+            IPv4 ipPacket = (IPv4)packet.getPayload();
+            int srcAddr = ipPacket.getSourceAddress();
+            RouteEntry bestmatch = router.getRouteTable().lookup(srcAddr);
+
+            // If no entry matched, do nothing
+            if (null == bestmatch) { 
+                System.out.println("Cannot find the source address in the route table");
+                return; 
+            }   
+
+            Iface outIface = bestmatch.getInterface();
+
+            router.createICMPMessage(packet, outIface, (byte)3, (byte)1); 
+            
+            int dstAddr = ipPacket.getDestinationAddress();
+            if (packets.isEmpty() && ArpQO.packetMap.containsKey(dstAddr)) {
+                ArpQO.packetMap.remove(dstAddr);
+            }
+            return;
+        }
     }
 }
 
-class DataThreadObject extends ArpQOData {
-    Thread attemptThread;
-    
-}
+//class DataThreadObject extends ArpQOData {
+//    Thread attemptThread;
+//
+//}
 
 public class ArpQO { // implements Runnable {
-    ConcurrentHashMap<Integer, ArpQOData> packetMap;
+    static ConcurrentHashMap<Integer, ArpQOData> packetMap;
     //ConcurrentHashMap<Integer, Thread> threadMap;
-    private Router router;
 
-    public ArpQO() {
-	packetMap = new ConcurrentHashMap<>();
-	//attemptThread = new Thread(this);
-	// this.router = r;
+//    public ArpQO() {
+//        packetMap = new ConcurrentHashMap<>();
+//        //attemptThread = new Thread(this);
+//        // this.router = r;
+//    }
+
+    static public void insert(int ip, Ethernet etherPacket, Ethernet ether, Iface bestMatch, Router router) {
+        if(packetMap == null)
+            packetMap = new ConcurrentHashMap<>();
+        
+        if (!packetMap.containsKey(ip)) {
+            packetMap.put(ip, new ArpQOData(router));
+        } 
+        ArpQOData data = packetMap.get(ip);
+        data.packets.add(etherPacket);
+        data.outIface = bestMatch;
+        data.arpRequest = ether;
+        data.run();
     }
 
-    public void insert(int ip, Ethernet etherPacket) {
-	if (!packetMap.containsKey(ip)) {
-	    packetMap.put(ip, new ArpQOData());
-	} 
-	packetMap.get(ip).packets.add(etherPacket);
+    //    public void execute1(int ip, Ethernet ether, Iface inIface) {
+    //        // start the thead for ip ArpQOData object
+    //        final ArpQOData data = packetMap.get(ip);
+    //
+    //
+    //        //data.initThreadParamters(router, ether, inIface);
+    //        //data.attemptThread.start();
+    //    }
+    //
+    //    public void Run() {
+    // TODO: Figure out how to send ip here to get the data object
 
-    }
-   
-    public void execute1(int ip, Ethernet ether, Iface inIface) {
-	// start the thead for ip ArpQOData object
-	final ArpQOData data = packetMap.get(ip);
-	
+    //final ArpQOData data = packetMap.get(ip);
+    //
+    //// Thread will stop after 3 tries
+    //while (count < 4) {
+    //    System.out.println("ARP request attempt: " + data.count);
+    //    
+    //    
+    //   
+    //    
 
-	//data.initThreadParamters(router, ether, inIface);
-	//data.attemptThread.start();
-    }
+    //    // Send ARP request every seonds
+    //    count++;
+    //    try {
+    //	Thread.sleep(1000); 
+    //    } catch (InterruptedException e) {
+    //	
+    //    }
+    //}
 
-    public void Run() {
-	// TODO: Figure out how to send ip here to get the data object
-	
-	//final ArpQOData data = packetMap.get(ip);
-	//
-	//// Thread will stop after 3 tries
-	//while (count < 4) {
-	//    System.out.println("ARP request attempt: " + data.count);
-	//    
-	//    
-	//   
-	//    
+    // If request for IP is still not fulfilled remove it
+    // remove from packetsMap
+//}
 
-	//    // Send ARP request every seonds
-	//    count++;
-	//    try {
-	//	Thread.sleep(1000); 
-	//    } catch (InterruptedException e) {
-	//	
-	//    }
-	//}
-
-	// If request for IP is still not fulfilled remove it
-	// remove from packetsMap
-    }
-    
-    /*
+/*
 
     public void timeout(final int ip, final Router router, final Ethernet ether, final Iface inIface) {
 
@@ -171,13 +223,13 @@ public class ArpQO { // implements Runnable {
 	} 
 	timeout(ip, router, ether, inIface);
     }
-    */
-    public void print() {
-	System.out.println("---------------- ARP Table -------------------");
-	for (int ip : packetMap.keySet()) {
-	    System.out.println(IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString());
-	}
-	System.out.println("----------------------------------------------");
+ */
+public static void print() {
+    System.out.println("---------------- ARP Table -------------------");
+    for (int ip : packetMap.keySet()) {
+        System.out.println(IPv4.fromIPv4Address(ip) + " -> " + packetMap.get(ip).toString());
     }
-    
+    System.out.println("----------------------------------------------");
+}
+
 }
