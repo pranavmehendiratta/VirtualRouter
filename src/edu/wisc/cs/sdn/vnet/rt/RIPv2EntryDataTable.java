@@ -8,7 +8,6 @@ public class RIPv2EntryDataTable implements Runnable {
     ConcurrentHashMap<String, RIPv2EntryData> ripDataTable;
     ConcurrentHashMap<String, Integer> routerInterfaces;
     private Thread timeoutThread; 
-    //private RouteTable routeTable; // #delete
     public static final long TIMEOUT = 30000; // 30 seconds
 
     public RIPv2EntryDataTable(RouteTable rt) {
@@ -16,15 +15,12 @@ public class RIPv2EntryDataTable implements Runnable {
 	routerInterfaces = new ConcurrentHashMap<>();
 	timeoutThread = new Thread(this);
 	timeoutThread.start();
-	//routeTable = rt; // #delete
     }
 
     public boolean insert(String entry, int metric) {
 	if (routerInterfaces.containsKey(entry)) {
 	    return false;
 	}
-	
-	//System.out.println("Inside insert -> Entry: " + entry + ", metric: " + metric); 
 	
 	if (!ripDataTable.containsKey(entry)) {
 	    ripDataTable.put(entry, new RIPv2EntryData(metric));
@@ -53,8 +49,6 @@ public class RIPv2EntryDataTable implements Runnable {
 		// Do nothing here 
 	    }
 
-	    //System.out.println("Attempting to remove the expired entries. time: " + count++ + "s");
-	    
 	    // Try removing the entries
 	    for (String entry : ripDataTable.keySet()) {
 		RIPv2EntryData red = ripDataTable.get(entry);
@@ -62,12 +56,6 @@ public class RIPv2EntryDataTable implements Runnable {
 		    
 		    if (!routerInterfaces.containsKey(entry)) { 
 			System.out.println("Remove entry: " + entry);
-			
-			// remove from the table
-			//ripDataTable.remove(entry);
-			
-			// remove from route table as well
-			//this.routeTable.remove(entry.getAddress(), entry.getSubnetMask());
 		    }
 		}
 	    }
@@ -80,32 +68,6 @@ public class RIPv2EntryDataTable implements Runnable {
 	System.out.println("----- routersInterface -----");
 	System.out.println(Arrays.asList(routerInterfaces));
     } 
-
-    //public RIPv2Entry checkIfEntryExists(RouteEntry re, RIPv2Entry e1) {
-    //    if (null == re && e1 == null) {
-    //        return null;
-    //    }
-    //    
-    //    //print();
-
-    //    if (re != null) {
-    //        for (RIPv2Entry entry : ripDataTable.keySet()) {
-    //    	if (entry.getAddress() == re.getDestinationAddress()
-    //    		&& entry.getSubnetMask() == re.getMaskAddress()) {
-    //    	    return entry; 
-    //    	}
-    //        }
-    //    } else if (e1 != null) {
-    //        for (RIPv2Entry entry : ripDataTable.keySet()) {
-    //    	if (entry.getAddress() == e1.getAddress()
-    //    		&& entry.getSubnetMask() == e1.getSubnetMask()) {
-    //    	    return entry; 
-    //    	}
-    //        }
-    //    }
-
-    //    return null;
-    //}
 }
 
 class RIPv2EntryData {
