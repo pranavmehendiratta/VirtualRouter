@@ -12,7 +12,7 @@ import java.nio.ByteBuffer;
 /**
  * @author Aaron Gember-Jacobson and Anubhavnidhi Abhashkumar
  */
-public class Router extends Device
+public class Router extends Device implements Runnable
 {	
     /** Routing table for the router */
     private RouteTable routeTable;
@@ -22,6 +22,14 @@ public class Router extends Device
 
     /** Queue for packets whose ARP is unavailable */
     //    private ArpQO ArpQO;
+
+    /** RIP table for send RIP messages */
+    private RIPv2EntryDataTable ripEntryTable;
+
+    /** Thread for sending unsolicited RIP responses */
+    private Thread ripThread;
+
+    public static final String RIP_IP_ADDRESS = "224.0.0.9";
 
     /**
      * Creates a router for a specific host.
@@ -33,6 +41,10 @@ public class Router extends Device
         this.routeTable = new RouteTable();
         this.arpCache = new ArpCache();
         //	this.ArpQO = new ArpQO();
+    
+	      // Intialize the thread
+	      ripThread = new Thread(this);
+	      ripEntryTable = new RIPv2EntryDataTable(this.routeTable);
     }
 
     public ArpCache getArpCache() {
@@ -49,18 +61,150 @@ public class Router extends Device
      * Load a new routing table from a file.
      * @param routeTableFile the name of the file containing the routing table
      */
-    public void loadRouteTable(String routeTableFile)
+    public void loadRouteTable(String routeTableFile, boolean loadFromFile)
     {
-        if (!routeTable.load(routeTableFile, this))
-        {
-            System.err.println("Error setting up routing table from file "+ routeTableFile);
-            System.exit(1);
-        }
 
-        System.out.println("Loaded static route table");
-        System.out.println("-------------------------------------------------");
-        System.out.print(this.routeTable.toString());
-        System.out.println("-------------------------------------------------");
+	if (loadFromFile && !routeTable.load(routeTableFile, this))
+	{
+	    System.err.println("Error setting up routing table from file "+ routeTableFile);
+	    System.exit(1);
+	} else if (!routeTable.loadFromString(routeTableFile, this) && !loadFromFile) {
+	    System.err.println("Error setting up routing table from file "+ routeTableFile);
+	    System.exit(1);
+	}
+
+	if (loadFromFile) {
+	    System.out.println("loaded static route table");
+	} else {
+	    System.out.println("created route table");
+	    intializeAndSendRipRequests();
+	}
+
+	System.out.println("-------------------------------------------------");
+	System.out.print(this.routeTable.toString());
+	System.out.println("-------------------------------------------------");
+    }
+
+    public void intializeAndSendRipRequests() {
+	System.out.println("---- Inside intializeAndSendRipRequests ----");
+	sendUnsolicitedRipResponse(true);
+	ripThread.start();
+	System.out.println("---- Done with intializeAndSendRipRequests ----");
+    }
+
+    public void sendUnsolicitedRipResponse(boolean init) {
+	//ripEntryTable.print();
+	Map<String, Iface> interfaces = this.getInterfaces();
+	for (String ifaceName : interfaces.keySet()) {
+	    Iface iface = interfaces.get(ifaceName);
+	    Ethernet packet = constructRipBroadcastMessage(iface, init);
+	    this.sendPacket(packet, iface);
+	}
+    }
+	
+    public void run() {
+	System.out.println("Inside run. Ripthread starting");
+	while (true) {
+	    // Wait before send again
+	    try { 
+		// For send responses after 10 seconds
+		Thread.sleep(10000); 
+	    } catch (InterruptedException e) { 
+		break; 
+	    }
+	    
+	    // Send RIP messages here
+	    sendUnsolicitedRipResponse(false);
+	}
+    }
+
+    public Ethernet constructRipBroadcastMessage(Iface iface, boolean init) {
+	String destMac = "FF:FF:FF:FF:FF:FF";
+	String destIp = RIP_IP_ADDRESS;
+	return constructRipIPv4Packet(iface, destMac, destIp, init);
+    }
+
+    public Ethernet constructRipReply(Iface iface, Iface inIface) {
+	String destMac = inIface.getMacAddress().toString();
+	String destIp = IPv4.fromIPv4Address(inIface.getIpAddress());
+	return constructRipIPv4Packet(iface, destMac, destIp, false);
+    }
+
+    public Ethernet constructRipIPv4Packet(Iface iface, String destMac, String destIp, boolean init) {
+	Ethernet ether = new Ethernet();
+	ether.setDestinationMACAddress(destMac);
+	ether.setSourceMACAddress(iface.getMacAddress().toBytes());
+	ether.setEtherType(Ethernet.TYPE_IPv4);
+
+	// Create IPv4 packet for send the RIP information
+	IPv4 ipv4 = new IPv4();
+	ipv4.setDestinationAddress(IPv4.toIPv4Address(destIp));
+	ipv4.setSourceAddress(iface.getIpAddress());
+	ipv4.setTtl((byte)64);
+	ipv4.setProtocol(IPv4.PROTOCOL_UDP);
+
+	// Create UDP packet for send RIP information
+	UDP udp = new UDP();
+	
+	// Both ports are always constant
+	udp.setSourcePort(UDP.RIP_PORT);
+	udp.setDestinationPort(UDP.RIP_PORT);
+	// Set payload for all packets
+
+	// TODO: Check if we have to send the whole RIP table of the router or 
+	// something needs to be changed
+	udp.setPayload(constructRipv2Packet(iface, init));
+	ipv4.setPayload(udp);
+	ether.setPayload(ipv4);
+
+	return ether;
+    }
+
+    public String getRipTableEntryKey(String ip, String mask) {
+	return ip + "#" + mask; 
+    }
+ 
+
+    public RIPv2 constructRipv2Packet(Iface iface, boolean init) {
+	RIPv2 ripPacket = new RIPv2();
+	ripPacket.setCommand(RIPv2.COMMAND_RESPONSE);
+	
+	for (RouteEntry entry : routeTable.getEntries()) {
+	    if (entry == null) {
+		continue;
+	    }
+	    
+	    int ip = entry.getDestinationAddress();
+	    int mask = entry.getMaskAddress();
+	    int nextHopAddr = iface.getIpAddress();
+	    int metric;
+	    
+	    String key = getRipTableEntryKey(IPv4.fromIPv4Address(entry.getDestinationAddress()),
+			IPv4.fromIPv4Address(entry.getMaskAddress()));
+	    
+	    // TODO: check if race condition can occur
+	    if (!init) {
+		RIPv2EntryData tableEntryData = ripEntryTable.ripDataTable.get(key);
+		
+		if (tableEntryData == null) {
+		    continue;
+		}
+
+		metric = tableEntryData.metric;
+	    } else {
+		metric = 1;
+		if(ripEntryTable.insert(key, metric)) { 
+		    ripEntryTable.routerInterfaces.put(key, 1);
+		}
+	    }	
+	    
+	    RIPv2Entry ripEntry = new RIPv2Entry(ip, mask, metric);
+	    ripEntry.setNextHopAddress(nextHopAddr);
+
+	    // Add each RIPv2Entry to ripDataTable
+	    ripPacket.addEntry(ripEntry);
+	}
+	return ripPacket;
     }
 
     /**
@@ -102,14 +246,71 @@ public class Router extends Device
         switch(etherPacket.getEtherType())
         {
         case Ethernet.TYPE_IPv4:
-            this.handleIpPacket(etherPacket, inIface);
-            break;
+            if (isRIPpacket(etherPacket)) {
+		    System.out.println("Getting periodic RIP update");
+		    processRIPpacket(etherPacket, inIface);
+		} else {
+		    System.out.println("Found ping/traceroute packet");
+		    this.handleIpPacket(etherPacket, inIface);
+		}
         case Ethernet.TYPE_ARP:
             this.handleARPPacket(etherPacket, inIface);
             break;
         }
 
         /********************************************************************/
+    }
+
+    public void processRIPpacket(Ethernet etherPacket, Iface inIface) {
+	boolean sendTriggeredUpdate = false;
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	UDP udp = (UDP)ipPacket.getPayload();
+	RIPv2 ripTable = (RIPv2)udp.getPayload();
+	List<RIPv2Entry> entries = ripTable.getEntries();    
+	for (RIPv2Entry entry : entries) {
+	    int nextHopAddress = entry.getNextHopAddress();
+	    int address = entry.getAddress();
+	    int mask = entry.getSubnetMask();
+	    int metric = entry.getMetric();
+
+	    //System.out.println("nextHopAddress: " + IPv4.fromIPv4Address(nextHopAddress) + 
+	    //", address: " + IPv4.fromIPv4Address(address) + ", mask: " + IPv4.fromIPv4Address(mask)
+	    //+ ", metric: " + metric + ", inIface address: " + 
+	    //IPv4.fromIPv4Address(inIface.getIpAddress()) + ", inIface subnetmask: " + 
+	    //IPv4.fromIPv4Address(inIface.getSubnetMask()) + ", inIface name: " + inIface.getName());
+
+	    String ripEntryKey = getRipTableEntryKey(IPv4.fromIPv4Address(address), 
+				    IPv4.fromIPv4Address(mask)); 
+	    
+	    boolean insertionResult = ripEntryTable.insert(ripEntryKey, metric + 1);
+	    System.out.println("insertionResult: " + insertionResult);
+
+	    if (insertionResult) {
+		System.out.println("Updating the route table as well");
+		routeTable.remove(address, mask);
+		routeTable.insert(address, nextHopAddress, mask, inIface);
+	    }
+	} 
+    
+	System.out.println("<--- Updated route table --->");
+	System.out.println(this.routeTable.toString());
+	System.out.println("<--- Current arp cache --->");
+	System.out.println(this.arpCache.toString());
+    }
+
+    public boolean isRIPpacket(Ethernet etherPacket) {
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	if (ipPacket.getDestinationAddress() != IPv4.toIPv4Address(RIP_IP_ADDRESS)) {
+	    return false;
+	}
+	if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
+	    return false;
+	}
+	UDP udp = (UDP)ipPacket.getPayload();
+	if (!(udp.getSourcePort() == UDP.RIP_PORT && udp.getDestinationPort() == UDP.RIP_PORT)) {
+	    return false;
+	}
+	return true;
     }
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {

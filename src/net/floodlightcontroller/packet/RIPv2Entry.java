@@ -11,10 +11,10 @@ public class RIPv2Entry
 
     protected short addressFamily;
     protected short routeTag;
-	protected int address;
-	protected int subnetMask;
-	protected int nextHopAddress;
-	protected int metric;
+	protected int address; // Iface address ?
+	protected int subnetMask; // subnet mask of the current router ?
+	protected int nextHopAddress; // Ip wheret he packets should be forwarded
+	protected int metric; // it is hop count for the next address
 
     public RIPv2Entry()
     { }
