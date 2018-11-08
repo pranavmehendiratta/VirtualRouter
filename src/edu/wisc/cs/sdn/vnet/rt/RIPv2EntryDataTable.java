@@ -24,13 +24,15 @@ public class RIPv2EntryDataTable implements Runnable {
 	    return false;
 	}
 	
-	System.out.println("Inside insert -> Entry: " + entry + ", metric: " + metric); 
+	//System.out.println("Inside insert -> Entry: " + entry + ", metric: " + metric); 
 	
 	if (!ripDataTable.containsKey(entry)) {
 	    ripDataTable.put(entry, new RIPv2EntryData(metric));
 	    return true;
 	} else {
-	    ripDataTable.get(entry).update(metric); 
+	    if (ripDataTable.get(entry).update(metric)) {
+		return true;
+	    }
 	    return false;
 	}    
     }
@@ -115,11 +117,13 @@ class RIPv2EntryData {
 	this.time = System.currentTimeMillis();
     }
 
-    public void update(int metric) {
+    public boolean update(int metric) {
 	time = System.currentTimeMillis();
 	if (this.metric > metric) {
 	    this.metric = metric;
+	    return true;
 	}
+	return false;
     }
 
     public String toString() {

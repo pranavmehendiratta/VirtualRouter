@@ -63,6 +63,8 @@ public class Router extends Device implements Runnable
      */
     public void loadRouteTable(String routeTableFile, boolean loadFromFile)
     {
+
+	System.out.println("----- Inside loadRouteTable -----");
 	if (loadFromFile && !routeTable.load(routeTableFile, this))
 	{
 	    System.err.println("Error setting up routing table from file "+ routeTableFile);
@@ -164,6 +166,7 @@ public class Router extends Device implements Runnable
     }
 
     public RIPv2 constructRipv2Packet(Iface iface, boolean init) {
+	System.out.println("------ Inside constructRipv2Packet -------");
 	RIPv2 ripPacket = new RIPv2();
 	ripPacket.setCommand(RIPv2.COMMAND_RESPONSE);
 
@@ -202,6 +205,7 @@ public class Router extends Device implements Runnable
 	    // Add each RIPv2Entry to ripDataTable
 	    ripPacket.addEntry(ripEntry);
 	}
+	System.out.println("------ Done with constructRipv2Packet -------");
 	return ripPacket;
     }
 
@@ -262,6 +266,8 @@ public class Router extends Device implements Runnable
     }
 
     public void processRIPpacket(Ethernet etherPacket, Iface inIface) {
+	System.out.println("------ Inside processRIPpacket ------");
+	
 	boolean sendTriggeredUpdate = false;
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
 	UDP udp = (UDP)ipPacket.getPayload();
@@ -283,6 +289,12 @@ public class Router extends Device implements Runnable
 		    IPv4.fromIPv4Address(mask)); 
 
 	    boolean insertionResult = ripEntryTable.insert(ripEntryKey, metric + 1);
+	    
+	    if (insertionResult) {
+		sendTriggeredUpdate = true;
+		sendUnsolicitedRipResponse(false);	
+	    }
+	    
 	    System.out.println("insertionResult: " + insertionResult);
 
 	    if (insertionResult) {
@@ -292,10 +304,15 @@ public class Router extends Device implements Runnable
 	    }
 	} 
 
+	if (sendTriggeredUpdate) {
+	    System.out.println("Sending triggered update");
+	}
+
 	System.out.println("<--- Updated route table --->");
 	System.out.println(this.routeTable.toString());
 	System.out.println("<--- Current arp cache --->");
 	System.out.println(this.arpCache.toString());
+	System.out.println("------ Done with processRIPpacket ------");
     }
 
     public boolean isRIPpacket(Ethernet etherPacket) {
@@ -316,13 +333,13 @@ public class Router extends Device implements Runnable
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
 
-	System.out.println("------ handleARPRequests: All interfaces of the current router ------");
+	//System.out.println("------ handleARPRequests: All interfaces of the current router ------");
 	for (Iface iface : this.interfaces.values()) {
 	    System.out.println(iface.toString());
 	}
-	System.out.println("---------------------ARP request packet------------------------------");
-	System.out.println(etherPacket.toString());
-	System.out.println("---------------------------------------------------------------------");
+	//System.out.println("---------------------ARP request packet------------------------------");
+	//System.out.println(etherPacket.toString());
+	//System.out.println("---------------------------------------------------------------------");
 
 
 	//arpObj.print();
