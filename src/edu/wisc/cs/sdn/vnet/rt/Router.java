@@ -20,9 +20,6 @@ public class Router extends Device implements Runnable
     /** ARP cache for the router */
     private ArpCache arpCache;
 
-    /** Queue for packets whose ARP is unavailable */
-    //    private ArpQO ArpQO;
-
     /** RIP table for send RIP messages */
     private RIPv2EntryDataTable ripEntryTable;
 
@@ -40,7 +37,6 @@ public class Router extends Device implements Runnable
 	super(host,logfile);
 	this.routeTable = new RouteTable();
 	this.arpCache = new ArpCache();
-	//	this.ArpQO = new ArpQO();
     
 	// Intialize the thread
 	ripThread = new Thread(this);
@@ -57,6 +53,11 @@ public class Router extends Device implements Runnable
     public RouteTable getRouteTable()
     { return this.routeTable; }
 
+
+    /////////////////////////////////////////////////////////////////////
+    //////////////////// ROUTER STUFF ///////////////////////////////////
+    /////////////////////////////////////////////////////////////////////
+
     /**
      * Load a new routing table from a file.
      * @param routeTableFile the name of the file containing the routing table
@@ -64,7 +65,7 @@ public class Router extends Device implements Runnable
     public void loadRouteTable(String routeTableFile, boolean loadFromFile)
     {
 
-	System.out.println("----- Inside loadRouteTable -----");
+	//System.out.println("----- Inside loadRouteTable -----");
 	if (loadFromFile && !routeTable.load(routeTableFile, this))
 	{
 	    System.err.println("Error setting up routing table from file "+ routeTableFile);
@@ -75,9 +76,9 @@ public class Router extends Device implements Runnable
 	}
 
 	if (loadFromFile) {
-	    System.out.println("loaded static route table");
+	    //System.out.println("loaded static route table");
 	} else {
-	    System.out.println("created route table");
+	    //System.out.println("created route table");
 	    intializeAndSendRipRequests();
 	}
 
@@ -87,14 +88,13 @@ public class Router extends Device implements Runnable
     }
 
     public void intializeAndSendRipRequests() {
-	System.out.println("---- Inside intializeAndSendRipRequests ----");
+	//System.out.println("---- Inside intializeAndSendRipRequests ----");
 	sendUnsolicitedRipResponse(true);
 	ripThread.start();
-	System.out.println("---- Done with intializeAndSendRipRequests ----");
+	//System.out.println("---- Done with intializeAndSendRipRequests ----");
     }
 
     public void sendUnsolicitedRipResponse(boolean init) {
-	//ripEntryTable.print();
 	Map<String, Iface> interfaces = this.getInterfaces();
 	for (String ifaceName : interfaces.keySet()) {
 	    Iface iface = interfaces.get(ifaceName);
@@ -210,6 +210,63 @@ public class Router extends Device implements Runnable
     }
 
 
+    public void processRIPpacket(Ethernet etherPacket, Iface inIface) {
+	boolean sendTriggeredUpdate = false;
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	UDP udp = (UDP)ipPacket.getPayload();
+	RIPv2 ripTable = (RIPv2)udp.getPayload();
+	List<RIPv2Entry> entries = ripTable.getEntries();    
+	for (RIPv2Entry entry : entries) {
+	    int nextHopAddress = entry.getNextHopAddress();
+	    int address = entry.getAddress();
+	    int mask = entry.getSubnetMask();
+	    int metric = entry.getMetric();
+
+	    String ripEntryKey = getRipTableEntryKey(IPv4.fromIPv4Address(address), 
+		    IPv4.fromIPv4Address(mask)); 
+
+	    boolean insertionResult = ripEntryTable.insert(ripEntryKey, metric + 1);
+	    
+	    if (insertionResult) {
+		sendTriggeredUpdate = true;
+	    }
+	    
+	    System.out.println("insertionResult: " + insertionResult);
+
+	    if (insertionResult) {
+		//System.out.println("Updating the route table as well");
+		routeTable.remove(address, mask);
+		routeTable.insert(address, nextHopAddress, mask, inIface);
+	    }
+	} 
+
+	// Sending triggered update
+	if (sendTriggeredUpdate) {
+	    //System.out.println("Sending triggered update");
+	    sendUnsolicitedRipResponse(false);	
+	}
+
+	//System.out.println("<--- Updated route table --->");
+	//System.out.println(this.routeTable.toString());
+	//System.out.println("<--- Current arp cache --->");
+	//System.out.println(this.arpCache.toString());
+	//System.out.println("------ Done with processRIPpacket ------");
+    }
+
+    public boolean isRIPpacket(Ethernet etherPacket) {
+	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
+	if (ipPacket.getDestinationAddress() != IPv4.toIPv4Address(RIP_IP_ADDRESS)) {
+	    return false;
+	}
+	if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
+	    return false;
+	}
+	UDP udp = (UDP)ipPacket.getPayload();
+	if (!(udp.getSourcePort() == UDP.RIP_PORT && udp.getDestinationPort() == UDP.RIP_PORT)) {
+	    return false;
+	}
+	return true;
+    }
     /**
      * Load a new ARP cache from a file.
      * @param arpCacheFile the name of the file containing the ARP cache
@@ -235,12 +292,10 @@ public class Router extends Device implements Runnable
      */
     public void handlePacket(Ethernet etherPacket, Iface inIface)
     {
-	//System.out.println("*** -> Received packet: " + etherPacket.toString().replace("\n", "\n\t"));
 
 	/********************************************************************/
-	/* Adding MacAddresses of the Source IP at the router                                             */
+	/* Adding MacAddresses of the Source IP at the router */
 	for(Iface iface : interfaces.values()) {
-	    //System.out.println("mac address: " + iface.getMacAddress() + ", ip: " + IPv4.fromIPv4Address(iface.getIpAddress()));
 	    if (arpCache.lookup(iface.getIpAddress()) == null) {
 		arpCache.insert(iface.getMacAddress(), iface.getIpAddress());
 	    }
@@ -265,84 +320,13 @@ public class Router extends Device implements Runnable
 	/********************************************************************/
     }
 
-    public void processRIPpacket(Ethernet etherPacket, Iface inIface) {
-	System.out.println("------ Inside processRIPpacket ------");
-	
-	boolean sendTriggeredUpdate = false;
-	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
-	UDP udp = (UDP)ipPacket.getPayload();
-	RIPv2 ripTable = (RIPv2)udp.getPayload();
-	List<RIPv2Entry> entries = ripTable.getEntries();    
-	for (RIPv2Entry entry : entries) {
-	    int nextHopAddress = entry.getNextHopAddress();
-	    int address = entry.getAddress();
-	    int mask = entry.getSubnetMask();
-	    int metric = entry.getMetric();
-
-	    //System.out.println("nextHopAddress: " + IPv4.fromIPv4Address(nextHopAddress) + 
-	    //", address: " + IPv4.fromIPv4Address(address) + ", mask: " + IPv4.fromIPv4Address(mask)
-	    //+ ", metric: " + metric + ", inIface address: " + 
-	    //IPv4.fromIPv4Address(inIface.getIpAddress()) + ", inIface subnetmask: " + 
-	    //IPv4.fromIPv4Address(inIface.getSubnetMask()) + ", inIface name: " + inIface.getName());
-
-	    String ripEntryKey = getRipTableEntryKey(IPv4.fromIPv4Address(address), 
-		    IPv4.fromIPv4Address(mask)); 
-
-	    boolean insertionResult = ripEntryTable.insert(ripEntryKey, metric + 1);
-	    
-	    if (insertionResult) {
-		sendTriggeredUpdate = true;
-		sendUnsolicitedRipResponse(false);	
-	    }
-	    
-	    System.out.println("insertionResult: " + insertionResult);
-
-	    if (insertionResult) {
-		System.out.println("Updating the route table as well");
-		routeTable.remove(address, mask);
-		routeTable.insert(address, nextHopAddress, mask, inIface);
-	    }
-	} 
-
-	if (sendTriggeredUpdate) {
-	    System.out.println("Sending triggered update");
-	}
-
-	System.out.println("<--- Updated route table --->");
-	System.out.println(this.routeTable.toString());
-	System.out.println("<--- Current arp cache --->");
-	System.out.println(this.arpCache.toString());
-	System.out.println("------ Done with processRIPpacket ------");
-    }
-
-    public boolean isRIPpacket(Ethernet etherPacket) {
-	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
-	if (ipPacket.getDestinationAddress() != IPv4.toIPv4Address(RIP_IP_ADDRESS)) {
-	    return false;
-	}
-	if (ipPacket.getProtocol() != IPv4.PROTOCOL_UDP) {
-	    return false;
-	}
-	UDP udp = (UDP)ipPacket.getPayload();
-	if (!(udp.getSourcePort() == UDP.RIP_PORT && udp.getDestinationPort() == UDP.RIP_PORT)) {
-	    return false;
-	}
-	return true;
-    }
 
 
     private void handleARPPacket(Ethernet etherPacket, Iface inIface) {
 
-	//System.out.println("------ handleARPRequests: All interfaces of the current router ------");
 	for (Iface iface : this.interfaces.values()) {
 	    System.out.println(iface.toString());
 	}
-	//System.out.println("---------------------ARP request packet------------------------------");
-	//System.out.println(etherPacket.toString());
-	//System.out.println("---------------------------------------------------------------------");
-
-
-	//arpObj.print();
 
 	// ARP packet
 	ARP arpPacket = (ARP)etherPacket.getPayload();
@@ -355,10 +339,6 @@ public class Router extends Device implements Runnable
 	    int targetIP = ByteBuffer.wrap(arpPacket.getTargetProtocolAddress()).getInt();
 
 	    System.out.println("Processing ARP request for ip: " + IPv4.fromIPv4Address(targetIP));
-	    //System.out.println("interface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()));
-
-	    //System.out.println("target hardware address: " + arpPacket.getTargetHardwareAddress().length);
-
 	    if (targetIP == inIface.getIpAddress()) {
 
 		// create ethernet packet
@@ -397,12 +377,11 @@ public class Router extends Device implements Runnable
 
 		this.sendPacket(ether, inIface);
 		System.out.println("Done sending ARP reply");
-	    } else {
-		System.out.println("targetIP is not equal to inIface IP");
+	    } //else {
+		//System.out.println("targetIP is not equal to inIface IP");
 		// Find the best out interface and generate another request
-
 		//generateARPRequests(etherPacket, inIface);
-	    }
+	    //}
 	} else if (opCode == ARP.OP_REPLY){
 	    int targetIP = ByteBuffer.wrap(arpPacket.getSenderProtocolAddress()).getInt();
 	    // Add to Arp cache 
@@ -428,15 +407,12 @@ public class Router extends Device implements Runnable
 		ArpQO.packetMap.remove(targetIP);
 	    }
 	}
-
-	//	ArpQO.print();
     }
 
     private void generateARPRequests(Ethernet etherPacket, Iface bestMatchIface) {
 
 	// send arp reply if interface ip = packet ip
 	IPv4 ipPacket = (IPv4)(etherPacket.getPayload());
-	//        int dstAddr = ipPacket.getDestinationAddress();
 
 	RouteEntry bestMatch = routeTable.lookup(ipPacket.getDestinationAddress());
 	int dstAddr = bestMatch.getGatewayAddress();
@@ -467,31 +443,16 @@ public class Router extends Device implements Runnable
 	arp.setTargetHardwareAddress(hardAddr);
 	arp.setTargetProtocolAddress(dstAddr);
 
-	//RouteEntry bestmatch = this.routeTable.lookup(dstAddr);
-
-	//// If no entry matched, do nothing
-	//if (null == bestmatch) { 
-	//    System.out.println("GenerateARPRequest: Cannot find the source address in the route table");
-	//    return; 
-	//}
-
-	//System.out.println("bestmatche for ip: ");
-	//System.out.println(bestMatchIface);
-
-	//        System.out.println("dstAddr: " + IPv4.fromIPv4Address(dstAddr) + ", hardAddr: " +
-	//                MACAddress.valueOf(hardAddr));
-
-
 	ether.setPayload(arp);
 
 	// Enqueue the ethernet packet whose next mac address is not available
 	// send the arp request and wait for the mac address
-	//ArpQO.insert(dstAddr, etherPacket, ether, bestMatchIface,this);
 	final Router router = this;
 	final int finalDstAddr = dstAddr;
 	final Ethernet finalEtherPacket = etherPacket;
 	final Ethernet finalEther = ether;
 	final Iface finalBestMatchIface = bestMatchIface;
+
 	// Enqueue the ethernet packet whose next mac address is not available
 	// send the arp request and wait for the mac address
 	Thread t = new Thread(new Runnable() {
@@ -501,23 +462,6 @@ public class Router extends Device implements Runnable
 		});
 
 	t.start();
-
-	//Send first arp request
-	//System.out.println("Attemp 1 at finding mac address");
-
-	//        System.out.println("bestMatchIface for ip: " + IPv4.fromIPv4Address(dstAddr));
-	//        System.out.println(bestMatchIface);
-	//
-	//        System.out.println("Sending ARP request");
-
-	//TODO: Remove this
-	//	this.sendPacket(ether, bestMatchIface);
-
-	//Wait 1 second respectively for the next 2 subsequent packets.
-	//arpObj.timeout(dstAddr, this, ether, bestMatchIface);
-
-	//this.sendPacket(ether, inIface);
-	//System.out.println("Done generating ARP REQUEST for ip: " + IPv4.fromIPv4Address(dstAddr));
     }
 
     private void handleIpPacket(Ethernet etherPacket, Iface inIface)
@@ -528,7 +472,6 @@ public class Router extends Device implements Runnable
 
 	// Get IP header
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
-	//System.out.println("Handle IP packet");
 
 	if (arpCache.lookup(ipPacket.getSourceAddress()) == null) {
 	    arpCache.insert(etherPacket.getSourceMAC(), ipPacket.getSourceAddress());
@@ -567,7 +510,6 @@ public class Router extends Device implements Runnable
     }
 
     private void processPacketSentToRouter(Ethernet etherPacket, Iface inIface) {
-	//System.out.println("In ProcessPacketSentToRouter");
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
 	byte protocol = ipPacket.getProtocol();
 	if (protocol == IPv4.PROTOCOL_UDP || protocol == IPv4.PROTOCOL_TCP) {
@@ -582,12 +524,9 @@ public class Router extends Device implements Runnable
 
     private void processEchoRequest(Ethernet etherPacket, Iface inIface, byte type, byte code) {
 
-	//        System.out.println("Inside processEchoRequest");
-
 	Ethernet ether = createEthernetPacket(etherPacket, inIface);
 
 	if (null == ether) {
-	    //System.out.println("Cannot create ether packet. Returning from process" + "EchoRequest");
 	    return;
 	}
 
@@ -618,7 +557,6 @@ public class Router extends Device implements Runnable
 	ether.setPayload(ip);
 
 	this.sendPacket(ether, inIface);
-	//        System.out.println("Done with processEchoRequest");
     }
 
     private void forwardIpPacket(Ethernet etherPacket, Iface inIface)
@@ -626,7 +564,6 @@ public class Router extends Device implements Runnable
 	// Make sure it's an IP packet
 	if (etherPacket.getEtherType() != Ethernet.TYPE_IPv4)
 	{ return; }
-	//System.out.println("Forward IP packet");
 
 	// Get IP header
 	IPv4 ipPacket = (IPv4)etherPacket.getPayload();
@@ -634,8 +571,6 @@ public class Router extends Device implements Runnable
 
 	// Find matching route table entry 
 	RouteEntry bestMatch = this.routeTable.lookup(dstAddr);
-
-	//System.out.println("bestmatch: " + bestMatch);
 
 	// If no entry matched, do nothing
 	if (null == bestMatch) { 
@@ -645,8 +580,6 @@ public class Router extends Device implements Runnable
 
 	// Make sure we don't sent a packet back out the interface it came in
 	Iface outIface = bestMatch.getInterface();
-	//if (outIface == inIface)
-	//{ return; }
 
 	// Set source MAC address in Ethernet header
 	etherPacket.setSourceMACAddress(outIface.getMacAddress().toBytes());
@@ -660,40 +593,29 @@ public class Router extends Device implements Runnable
 	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
 	if (null == arpEntry){ 
 	    generateARPRequests(etherPacket, outIface);
-
-	    //createICMPMessage(etherPacket, inIface, (byte)3, (byte)1); 
-	    //handleARPPacket(etherPacket, inIface, ARP.OP_REPLY);
 	    return; 
 	}
 	etherPacket.setDestinationMACAddress(arpEntry.getMac().toBytes());
 	this.sendPacket(etherPacket, outIface);
-	//System.out.println("Done forwarding the packet");
     }
 
     public void createICMPMessage(Ethernet origPacket, Iface inIface, byte type, byte code) {
 	// create new ethernet packet
-	//System.out.println("Inside createICMPMessage");
 	Ethernet ether = createEthernetPacket(origPacket, inIface);
 
-	//System.out.println(arpCache.toString());
-
 	if (null == ether) {
-	    //System.out.println("Cannot create ether packet. Returning from create"+ "ICMPMessage");
 	    return;
 	}
 
 	IPv4 ip = createIPv4Packet(origPacket, inIface);
 
 	if (null == ip) {
-	    //System.out.println("Cannot create ip packet. Returning from create"+ "ICMPMessage");
 	    return;
 	}
 
 	ICMP icmp = createICMPPacket(origPacket, type, code);
 	ether.setPayload(ip);
 	ip.setPayload(icmp);
-
-	//System.out.println("iface ip: " + IPv4.fromIPv4Address(inIface.getIpAddress()) + ", iface mac: " + inIface.getMacAddress().toString());
 
 	this.sendPacket(ether, inIface);
     }
@@ -769,7 +691,6 @@ public class Router extends Device implements Runnable
 
 	// If no entry matched, do nothing
 	if (null == bestmatch) { 
-	    //System.out.println("Cannot find the source address in the route table");
 	    return null; 
 	}
 
@@ -782,7 +703,7 @@ public class Router extends Device implements Runnable
 	// Set destination MAC address in Ethernet header
 	ArpEntry arpEntry = this.arpCache.lookup(nextHop);
 	if (null == arpEntry) { 
-	    System.out.println("Cannot find arp entry");
+	    //System.out.println("Cannot find arp entry");
 	    return null; 
 	}
 
