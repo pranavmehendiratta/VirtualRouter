@@ -4,6 +4,7 @@ import edu.wisc.cs.sdn.vnet.rt.Router;
 import edu.wisc.cs.sdn.vnet.sw.Switch;
 import edu.wisc.cs.sdn.vnet.vns.Command;
 import edu.wisc.cs.sdn.vnet.vns.VNSComm;
+import net.floodlightcontroller.packet.IPv4;
 
 public class Main 
 {
@@ -85,29 +86,50 @@ public class Main
 		
 		if (dev instanceof Router) 
 		{
-			// Read static route table
-			if (routeTableFile != null)
-			{ ((Router)dev).loadRouteTable(routeTableFile); }
-			
-			// Read static ACP cache
-			if (arpCacheFile != null)
-			{ ((Router)dev).loadArpCache(arpCacheFile); }
+		    // Read static route table
+		    if (routeTableFile != null) { 
+			((Router)dev).loadRouteTable(routeTableFile, true); 
+		    } else {
+			System.out.println("Creating our own route table");
+			String routeTable = initalizeRouteTable((Router)dev);
+			((Router)dev).loadRouteTable(routeTable, false); 
+		    }
+
+
+		    // Read static ACP cache
+		    if (arpCacheFile != null)
+		    { ((Router)dev).loadArpCache(arpCacheFile); }
 		}
 
 		// Read messages from the server until the server closes the connection
 		System.out.println("<-- Ready to process packets -->");
 		while (vnsComm.readFromServer());
-		
+
 		// Shutdown the router
 		dev.destroy();
 	}
-	
+
+	static String initalizeRouteTable(Router router) {
+	    StringBuilder sb = new StringBuilder();
+	    for(Iface iface : router.interfaces.values()) {
+		sb.append(IPv4.fromIPv4Address(iface.getIpAddress() & iface.getSubnetMask()));
+		sb.append(" ");
+		sb.append("0.0.0.0");
+		sb.append(" ");
+		sb.append(IPv4.fromIPv4Address(iface.getSubnetMask()));	
+		sb.append(" ");
+		sb.append(iface.getName());
+		sb.append("#");
+	    }
+	    return sb.toString();
+	}
+
 	static void usage()
 	{
-		System.out.println("Virtual Network Client");
-		System.out.println("VNet -v host [-s server] [-p port] [-h]");
-		System.out.println("     [-r routing_table] [-a arp_cache] [-l log_file]");
-		System.out.println(String.format("  defaults server=%s port=%d", 
-				DEFAULT_SERVER, DEFAULT_PORT));
+	    System.out.println("Virtual Network Client");
+	    System.out.println("VNet -v host [-s server] [-p port] [-h]");
+	    System.out.println("     [-r routing_table] [-a arp_cache] [-l log_file]");
+	    System.out.println(String.format("  defaults server=%s port=%d", 
+			DEFAULT_SERVER, DEFAULT_PORT));
 	}
 }

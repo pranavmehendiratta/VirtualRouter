@@ -28,6 +28,10 @@ public class RouteTable
     public RouteTable()
     { this.entries = new LinkedList<RouteEntry>(); }
 
+    public List<RouteEntry> getEntries() {
+	return this.entries;
+    }
+
     /**
      * Lookup the route entry that matches a given IP address.
      * @param ip IP address
@@ -150,6 +154,57 @@ public class RouteTable
 	try { reader.close(); } catch (IOException f) {};
 	return true;
     }
+
+    public boolean loadFromString(String table, Router router) {
+	String [] lines = table.split("#");
+
+	for (String line : lines) {
+	    // Parse fields for route entry
+	    String ipPattern = "(\\d+\\.\\d+\\.\\d+\\.\\d+)";
+	    String ifacePattern = "([a-zA-Z0-9]+)";
+	    Pattern pattern = Pattern.compile(String.format(
+			"%s\\s+%s\\s+%s\\s+%s", 
+			ipPattern, ipPattern, ipPattern, ifacePattern));
+	    Matcher matcher = pattern.matcher(line);
+	    if (!matcher.matches() || matcher.groupCount() != 4)
+	    {
+		System.err.println("Invalid entry in routing table file");
+		return false;
+	    }
+
+	    int dstIp = IPv4.toIPv4Address(matcher.group(1));
+	    if (0 == dstIp)
+	    {
+		System.err.println("Error loading route table, cannot convert "
+			+ matcher.group(1) + " to valid IP");
+		return false;
+	    }
+
+	    int gwIp = IPv4.toIPv4Address(matcher.group(2));
+
+	    int maskIp = IPv4.toIPv4Address(matcher.group(3));
+	    if (0 == maskIp)
+	    {
+		System.err.println("Error loading route table, cannot convert "
+			+ matcher.group(3) + " to valid IP");
+		return false;
+	    }
+
+	    String ifaceName = matcher.group(4).trim();
+	    Iface iface = router.getInterface(ifaceName);
+	    if (null == iface)
+	    {
+		System.err.println("Error loading route table, invalid interface "
+			+ matcher.group(4));
+		return false;
+	    }
+
+	    // Add an entry to the route table
+	    this.insert(dstIp, gwIp, maskIp, iface);
+	}
+	return true;
+    }
+
 
     /**
      * Add an entry to the route table.
